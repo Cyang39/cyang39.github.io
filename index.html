@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>Cyang39 · Tools & Projects</title>
+  <meta name="description" content="Color and image tools by Cyang39. Try the Image Color Extractor (dominant colors → swatch PNG) running fully in your browser." />
+  <meta name="keywords" content="Cyang39, tools, projects, color, palette, dominant colors, image color extractor, GitHub Pages" />
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://cyang39.github.io/" />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cyang39" />
+  <meta property="og:title" content="Cyang39 · Tools & Projects" />
+  <meta property="og:description" content="Try the Image Color Extractor — a browser-only tool to analyze dominant colors and export a PNG swatch." />
+  <meta property="og:url" content="https://cyang39.github.io/" />
+  <meta property="og:image" content="https://cyang39.github.io/palette/og-palette.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Cyang39 · Tools & Projects" />
+  <meta name="twitter:description" content="Try the Image Color Extractor — a browser-only tool to analyze dominant colors and export a PNG swatch." />
+  <meta name="twitter:image" content="https://cyang39.github.io/palette/og-palette.png" />
+
+  <!-- Simple favicon (optional) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Verdana, sans-serif' fill='%23a7f3d0'%3EC%3C/text%3E%3C/svg%3E">
+
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --panel: #121319;
+      --border: #242635;
+      --text: #e9edf1;
+      --muted: #a9b1bd;
+      --brand: #7dd3fc;
+      --brand-2: #a7f3d0;
+      --link: #9cc2ff;
+      --shadow: 0 20px 60px rgba(0,0,0,.4);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font: 15px/1.6 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 800px at 10% -10%, rgba(125,211,252,.12), transparent 60%),
+        radial-gradient(1000px 700px at 110% 10%, rgba(167,243,208,.10), transparent 50%),
+        var(--bg);
+    }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Header */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(11,12,16,.6);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav {
+      max-width: 1100px; margin: 0 auto; padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .3px;
+    }
+    .brand-badge {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      display: grid; place-items: center; color: #0b0c10; font-weight: 900;
+      box-shadow: var(--shadow);
+    }
+    nav ul { list-style: none; display: flex; gap: 14px; margin: 0; padding: 0; }
+    nav a { display:inline-block; padding: 8px 12px; border-radius: 10px; }
+    nav a:hover { background: rgba(255,255,255,.06); text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      max-width: 1100px; margin: 36px auto 8px; padding: 0 16px;
+      display: grid; grid-template-columns: 1.1fr .9fr; gap: 24px;
+    }
+    @media (max-width: 960px) { .hero { grid-template-columns: 1fr; } }
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 40px); line-height: 1.15; margin: 10px 0 12px;
+      letter-spacing: .2px;
+    }
+    .hero p { color: var(--muted); margin: 0 0 18px; }
+    .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border);
+      background: linear-gradient(180deg, #1a1c25, #121319);
+      color: var(--text); font-weight: 700; box-shadow: var(--shadow);
+      transition: transform .06s ease, box-shadow .2s ease;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn.primary {
+      background: linear-gradient(180deg, #53b8ff, #299cf4);
+      color: #081018; border-color: #53b8ff;
+    }
+    .btn.ghost { background: #11131a; }
+
+    /* Card grid */
+    .grid {
+      max-width: 1100px; margin: 24px auto 64px; padding: 0 16px;
+      display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px;
+    }
+    @media (max-width: 1040px) { .grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; min-height: 320px;
+    }
+    .card .thumb {
+      aspect-ratio: 1200/630; width: 100%; background: #0f1118; border-bottom: 1px solid var(--border);
+      display: grid; place-items: center;
+    }
+    .card .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .card .body { padding: 14px; display: grid; gap: 8px; }
+    .card .body h3 { margin: 0; font-size: 18px; }
+    .card .body p { margin: 0; color: var(--muted); }
+    .card .actions { padding: 14px; margin-top: auto; display: flex; gap: 10px; }
+
+    /* Footer */
+    footer {
+      max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px;
+      color: var(--muted); border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="nav" role="navigation" aria-label="Primary">
+      <div class="brand">
+        <span class="brand-badge" aria-hidden="true">C</span>
+        <a href="/" style="font-size:16px; font-weight:800; text-decoration:none;">Cyang39</a>
+      </div>
+      <nav>
+        <ul>
+          <li><a href="/" aria-current="page">Home</a></li>
+          <li><a href="https://github.com/cyang39" target="_blank" rel="noopener">About</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="hero">
+      <div>
+        <h1>Tools & mini apps — fast, focused, and local-first.</h1>
+        <p>
+          Handy utilities crafted by <strong>Cyang39</strong>.  
+        </p>
+      </div>
+      <div class="card" aria-label="Image Color Extractor preview">
+        <div class="thumb">
+          <img
+            src="/palette/og-palette.png"
+            alt="Preview banner for Image Color Extractor showing swatch bands"
+            loading="eager"
+            decoding="async"
+          />
+        </div>
+        <div class="body">
+          <h3>Image Color Extractor</h3>
+          <p>Extract dominant colors with K-Means, pick which colors to include, switch vertical/horizontal bands, adjust square size, and export a PNG — locally.</p>
+        </div>
+        <div class="actions">
+          <a class="btn" href="/palette/">Open App</a>
+          <a class="btn" href="https://github.com/cyang39" target="_blank" rel="noopener">Source / About</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid" aria-label="More projects">
+      <!-- When you add more projects, duplicate the .card block with new content -->
+      <div class="card" aria-label="Coming soon">
+        <div class="thumb" style="color:#9fb3c8; font-weight:700;">Coming soon</div>
+        <div class="body">
+          <h3>More small tools</h3>
+          <p>Space reserved for future mini apps — scripts, converters, and visual helpers.</p>
+        </div>
+        <div class="actions">
+          <a class="btn" href="https://github.com/cyang39" target="_blank" rel="noopener">Follow updates</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div>© <span id="year"></span> Cyang39 · Built for GitHub Pages.</div>
+  </footer>
+
+  <script>
+    // tiny enhancement: current year in footer
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
+

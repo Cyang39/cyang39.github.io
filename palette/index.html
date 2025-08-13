@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<title>图片主色分析 · 提取主色生成色块图（纵向/横向，PNG 导出）</title>
+<meta name="description" content="在线图片主色提取工具：自动分析主色与占比，支持颜色勾选、纵向/横向色带、可调尺寸（默认正方形）、PNG 导出、拖拽图片、本地处理不上传。">
+<meta name="keywords" content="主色, 主色提取, 调色板, 色板, 色块图, dominant colors, palette, k-means, PNG 导出, 在线工具, GitHub Pages">
+
+<link rel="canonical" href="https://cyang39.github.io/palette/" />
+<meta name="robots" content="index,follow,max-image-preview:large" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Cyang39 · Palette Web App" />
+<meta property="og:title" content="图片主色分析 · 提取主色生成色块图（纵向/横向，PNG 导出）" />
+<meta property="og:description" content="无需上传，浏览器本地完成：提取主色与占比、勾选颜色、纵/横向色带、可调尺寸、PNG 导出、拖拽与中英文切换。" />
+<meta property="og:url" content="https://cyang39.github.io/palette/" />
+<meta property="og:image" content="https://cyang39.github.io/palette/og-palette.png" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="图片主色分析 · 提取主色生成色块图（纵向/横向，PNG 导出）" />
+<meta name="twitter:description" content="本地运行不上传：主色与占比、颜色勾选、方向切换、尺寸滑块、PNG 导出、拖入图片、i18n。" />
+<meta name="twitter:image" content="https://cyang39.github.io/palette/og-palette.png" />
+
+<link rel="alternate" hreflang="zh" href="https://cyang39.github.io/palette/">
+<link rel="alternate" hreflang="en" href="https://cyang39.github.io/palette/">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Crect width='16' height='64' x='0' fill='%23ff6767'/%3E%3Crect width='16' height='64' x='16' fill='%23ffbe5c'/%3E%3Crect width='16' height='64' x='32' fill='%2356d364'/%3E%3Crect width='16' height='64' x='48' fill='%236aa9ff'/%3E%3C/svg%3E">
+
+<style>
+  :root { --gap: 12px; --pad: 14px; --border:#e6e6e6; --muted:#666; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #222; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC","Noto Sans CJK SC","Microsoft YaHei", Arial, sans-serif; background: #fafafa; }
+  header { position: sticky; top: 0; background: #fff; z-index: 2; border-bottom: 1px solid var(--border); padding: 10px var(--pad); display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  .hdr-left { display: flex; align-items: center; gap: 10px; }
+  .hdr-right { display: flex; gap: 8px; }
+  .btn { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; cursor: pointer; font-weight: 600; }
+  .btn.primary { background: #111; border-color: #111; color: #fff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  main { padding: var(--pad); display: grid; grid-template-columns: 380px 1fr; gap: var(--gap); }
+  @media (max-width: 980px){ main { grid-template-columns: 1fr; } }
+  fieldset { border: 1px solid var(--border); border-radius: 12px; padding: var(--pad); background: #fff; }
+  legend { padding: 0 6px; font-weight: 700; }
+  .row { display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 8px; align-items: center; margin-bottom: 10px; }
+  .row.stacked { grid-template-columns: 1fr; }
+  label { color: #333; }
+  input[type="file"], input[type="number"], input[type="text"], select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  input[type="range"] { width: 100%; }
+  .inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .muted { color: var(--muted); }
+  .preview-wrap { display: flex; gap: var(--gap); align-items: flex-start; flex-wrap: wrap; }
+  canvas { border: 1px solid var(--border); background: #fff; border-radius: 10px; image-rendering: pixelated; }
+  .original { max-width: 200px; max-height: 200px; width: auto; height: auto; border: 1px solid var(--border); border-radius: 10px; background: #fff; object-fit: contain; }
+  .palette-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .color-item { display: grid; grid-template-columns: auto 40px 1fr auto; gap: 8px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background:#fff; }
+  .swatch { width: 40px; height: 28px; border: 1px solid var(--border); border-radius: 6px; }
+  .dropzone { border: 2px dashed #cfcfcf; border-radius: 12px; padding: 10px; text-align: left; background: #fcfcfc; }
+  .dropzone.drag { background: #eef7ff; border-color: #8ac2ff; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .seo { margin-top: 16px; color:#333; text-align: left; }
+  .faq dt { font-weight:700; margin-top:8px;}
+  .faq dd { margin:4px 0 8px 0; color:#444;}
+  footer { margin: 12px var(--pad) 24px; color:#555; text-align:center; }
+  footer a { color:#0a58ca; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hdr-left">
+    <strong id="t-title">图片主色分析 → PNG</strong>
+    <span class="muted" id="t-sub">本地运行，不上传图片</span>
+  </div>
+  <div class="hdr-right">
+    <button id="lang" class="btn" aria-label="Switch language">中文/English</button>
+    <button id="download" class="btn" disabled>PNG</button>
+  </div>
+</header>
+
+<main id="dropArea" class="dropzone" aria-label="Drop image here">
+  <!-- 左侧：设置与颜色列表 -->
+  <section>
+    <fieldset>
+      <legend id="t-input">输入与参数</legend>
+
+      <div class="row">
+        <label for="file" id="t-choose">选择图片</label>
+        <input id="file" type="file" accept="image/*" />
+      </div>
+
+      <div class="row stacked">
+        <div class="muted" id="t-dnd">也可以把图片拖到本区域</div>
+      </div>
+
+      <div class="row">
+        <label id="t-k">主色数量 K</label>
+        <input id="k" type="number" min="2" max="12" step="1" value="5" />
+      </div>
+
+      <div class="row">
+        <label id="t-minpct">小簇最小占比</label>
+        <div class="inline">
+          <input id="minPctRange" type="range" min="0" max="0.2" step="0.005" value="0.02" />
+          <input id="minPct" type="number" min="0" max="0.2" step="0.005" value="0.02" style="max-width:110px;" />
+        </div>
+      </div>
+
+      <div class="row">
+        <label id="t-iter">迭代次数</label>
+        <input id="maxIter" type="number" min="5" max="100" step="1" value="20" />
+      </div>
+
+      <div class="row">
+        <label id="t-orient">方向</label>
+        <div class="inline">
+          <label class="inline"><input type="radio" name="orient" value="vertical" checked /> <span id="t-vert">纵向</span></label>
+          <label class="inline"><input type="radio" name="orient" value="horizontal" /> <span id="t-horz">横向</span></label>
+        </div>
+      </div>
+
+      <div class="row">
+        <label id="t-size">输出尺寸（正方形）</label>
+        <div class="inline">
+          <input id="outSizeRange" type="range" min="32" max="2000" step="1" value="100" />
+          <input id="outSize" type="number" min="32" max="2000" step="1" value="100" style="max-width:110px;" />
+          <span class="muted">px</span>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset style="margin-top:12px;">
+      <legend id="t-colors">提取到的颜色（勾选参与合成）</legend>
+      <div id="paletteList" class="palette-list muted">—</div>
+    </fieldset>
+  </section>
+
+  <!-- 右侧：原图 + 预览 + 说明（左对齐） -->
+  <section>
+    <fieldset>
+      <legend id="t-preview">预览</legend>
+      <div class="preview-wrap">
+        <div>
+          <div class="muted" id="t-original">原图</div>
+          <img id="original" class="original" alt="original preview" />
+        </div>
+        <div>
+          <div class="muted" id="t-swatch">色块图</div>
+          <canvas id="preview" width="100" height="100"></canvas>
+        </div>
+      </div>
+      <div class="muted" id="distText" style="margin-top:8px;">—</div>
+
+      <!-- 说明（SEO 可爬取，左对齐） -->
+      <section class="seo">
+        <h1 id="seoTitle" style="font-size:16px;margin:8px 0;"></h1>
+        <p id="seoP1"></p>
+        <dl class="faq">
+          <dt id="faqQ1"></dt><dd id="faqA1"></dd>
+          <dt id="faqQ2"></dt><dd id="faqA2"></dd>
+          <dt id="faqQ3"></dt><dd id="faqA3"></dd>
+        </dl>
+      </section>
+    </fieldset>
+  </section>
+</main>
+
+<footer>
+  <span id="footerText">
+    本网页应用由 <a href="https://cyang39.github.io" target="_blank" rel="noopener noreferrer">Cyang39</a> 通过 ChatGPT5 制作
+  </span>
+</footer>
+
+<!-- 结构化数据：WebApplication + FAQPage -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Palette Web App",
+  "applicationCategory": "Multimedia",
+  "operatingSystem": "Web",
+  "url": "https://cyang39.github.io/palette/",
+  "description": "在线主色提取与色块图生成：本地处理不上传，支持颜色勾选、纵横向切换、尺寸滑块、PNG 导出、拖拽与中英文切换。",
+  "publisher": {
+    "@type": "Person",
+    "name": "Cyang39",
+    "url": "https://cyang39.github.io"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@type":"FAQPage",
+  "mainEntity":[
+    {"@type":"Question","name":"会上传我的图片吗？","acceptedAnswer":{"@type":"Answer","text":"不会，一切在浏览器本地完成。"}},
+    {"@type":"Question","name":"支持多少主色？","acceptedAnswer":{"@type":"Answer","text":"2–12 个可调，默认 5，过小簇会按阈值合并。"}},
+    {"@type":"Question","name":"如何导出？","acceptedAnswer":{"@type":"Answer","text":"点击右上角 PNG 按钮即可按当前参数导出图像。"}}
+  ]
+}
+</script>
+
+<script>
+/* ================= i18n（新增：说明与页脚） ================== */
+const I18N = {
+  zh: {
+    title: "图片主色分析 · 提取主色生成色块图（纵向/横向，PNG 导出）",
+    metaDesc: "在线图片主色提取工具：自动分析主色与占比，支持颜色勾选、纵向/横向色带、可调尺寸（默认正方形）、PNG 导出、拖拽图片、本地处理不上传。",
+    metaKW: "主色, 主色提取, 调色板, 色板, 色块图, dominant colors, palette, k-means, PNG 导出, 在线工具, GitHub Pages",
+    htitle: "图片主色分析 → PNG",
+    sub: "本地运行，不上传图片",
+    input: "输入与参数",
+    choose: "选择图片",
+    dnd: "也可以把图片拖到本区域",
+    k: "主色数量 K",
+    minpct: "小簇最小占比",
+    iter: "迭代次数",
+    orient: "方向",
+    vert: "纵向",
+    horz: "横向",
+    size: "输出尺寸（正方形）",
+    colors: "提取到的颜色（勾选参与合成）",
+    preview: "预览",
+    original: "原图",
+    swatch: "色块图",
+    noColors: "未提取到颜色",
+    noneSelected: "未选择任何颜色",
+    fail: "处理失败：",
+    png: "下载 PNG",
+    // 说明与FAQ
+    seoTitle: "在线主色提取与色块图生成工具（支持 PNG 导出）",
+    seoP1: "将图片拖入或选择本地文件，自动分析主色与比例。你可以勾选需要的颜色、切换纵向/横向色带，并用尺寸滑块快速导出正方形 PNG。所有处理均在浏览器本地完成，不会上传图片。",
+    faqQ1: "这个工具会把我的图片上传到服务器吗？",
+    faqA1: "不会，所有处理（像素采样、聚类、绘制与导出）都在你的浏览器本地运行。",
+    faqQ2: "可以调多少个主色？",
+    faqA2: "可在 2–12 之间调整（默认 5）。过小簇会按阈值自动合并。",
+    faqQ3: "支持导出哪些格式？",
+    faqA3: "当前支持 PNG。若需要 SVG 或 JSON 调色板，也可以扩展实现。",
+    // 页脚
+    footerHTML: `本网页应用由 <a href="https://cyang39.github.io" target="_blank" rel="noopener noreferrer">Cyang39</a> 通过 ChatGPT5 制作`
+  },
+  en: {
+    title: "Dominant Colors · Extract & Swatch (Vertical/Horizontal, PNG)",
+    metaDesc: "Online dominant color extractor: analyze colors and ratios locally, pick colors, vertical/horizontal bands, adjustable square size, PNG export, drag-and-drop, multilingual.",
+    metaKW: "dominant colors, color palette, swatch, k-means, PNG export, online tool, local processing, GitHub Pages",
+    htitle: "Dominant Colors → PNG",
+    sub: "Runs locally. No upload.",
+    input: "Input & Params",
+    choose: "Choose Image",
+    dnd: "Or drop an image here",
+    k: "K (number of colors)",
+    minpct: "Min cluster ratio",
+    iter: "Max iterations",
+    orient: "Direction",
+    vert: "Vertical",
+    horz: "Horizontal",
+    size: "Output size (square)",
+    colors: "Extracted colors (tick to include)",
+    preview: "Preview",
+    original: "Original",
+    swatch: "Swatch",
+    noColors: "No colors extracted",
+    noneSelected: "No color selected",
+    fail: "Failed: ",
+    png: "Download PNG",
+    // Description & FAQ
+    seoTitle: "Online Dominant Color Extractor & Swatch (PNG Export)",
+    seoP1: "Drop or choose an image to auto-analyze dominant colors and ratios. Pick which colors to include, switch between vertical/horizontal bands, and export a square PNG — all processed locally in your browser.",
+    faqQ1: "Does this upload my image to a server?",
+    faqA1: "No. Sampling, clustering, drawing and export all happen locally in your browser.",
+    faqQ2: "How many dominant colors can I pick?",
+    faqA2: "Anywhere between 2–12 (default 5). Tiny clusters will be merged by threshold.",
+    faqQ3: "Which formats are supported?",
+    faqA3: "PNG is supported now. SVG or JSON palettes can be added if needed.",
+    // Footer
+    footerHTML: `This web app was made by <a href="https://cyang39.github.io" target="_blank" rel="noopener noreferrer">Cyang39</a> using ChatGPT5`
+  }
+};
+let lang = document.documentElement.lang === "en" ? "en" : "zh";
+
+function applyLang() {
+  const t = I18N[lang];
+  document.title = t.title;
+  setMeta("description", t.metaDesc);
+  setMeta("keywords", t.metaKW);
+  setOG("og:title", t.title);
+  setOG("og:description", t.metaDesc);
+  setTwitter("twitter:title", t.title);
+  setTwitter("twitter:description", t.metaDesc);
+
+  byId("t-title").textContent = t.htitle;
+  byId("t-sub").textContent = t.sub;
+  byId("t-input").textContent = t.input;
+  byId("t-choose").textContent = t.choose;
+  byId("t-dnd").textContent = t.dnd;
+  byId("t-k").textContent = t.k;
+  byId("t-minpct").textContent = t.minpct;
+  byId("t-iter").textContent = t.iter;
+  byId("t-orient").textContent = t.orient;
+  byId("t-vert").textContent = t.vert;
+  byId("t-horz").textContent = t.horz;
+  byId("t-size").textContent = t.size;
+  byId("t-colors").textContent = t.colors;
+  byId("t-preview").textContent = t.preview;
+  byId("t-original").textContent = t.original;
+  byId("t-swatch").textContent = t.swatch;
+  byId("download").textContent = t.png;
+
+  // 说明与 FAQ
+  byId("seoTitle").textContent = t.seoTitle;
+  byId("seoP1").textContent = t.seoP1;
+  byId("faqQ1").textContent = t.faqQ1; byId("faqA1").textContent = t.faqA1;
+  byId("faqQ2").textContent = t.faqQ2; byId("faqA2").textContent = t.faqA2;
+  byId("faqQ3").textContent = t.faqQ3; byId("faqA3").textContent = t.faqA3;
+
+  // 页脚（含链接，保留 HTML）
+  byId("footerText").innerHTML = t.footerHTML;
+}
+
+function setMeta(name, content){
+  let el = document.querySelector(`meta[name="${name}"]`);
+  if(!el){ el = document.createElement("meta"); el.setAttribute("name", name); document.head.appendChild(el); }
+  el.setAttribute("content", content);
+}
+function setOG(prop, content){
+  let el = document.querySelector(`meta[property="${prop}"]`);
+  if(!el){ el = document.createElement("meta"); el.setAttribute("property", prop); document.head.appendChild(el); }
+  el.setAttribute("content", content);
+}
+function setTwitter(name, content){
+  let el = document.querySelector(`meta[name="${name}"]`);
+  if(!el){ el = document.createElement("meta"); el.setAttribute("name", name); document.head.appendChild(el); }
+  el.setAttribute("content", content);
+}
+const byId = (id)=>document.getElementById(id);
+
+document.getElementById("lang").addEventListener("click", () => {
+  lang = lang === "zh" ? "en" : "zh";
+  document.documentElement.lang = lang;
+  applyLang();
+  // 语言切换时更新占位图文字
+  setPlaceholder();
+});
+
+/* ============== 占位图（默认英文） ============== */
+function generatePlaceholder(textLang = "en"){
+  const w = 200, h = 200;
+  const text = textLang === "zh" ? "拖入图片" : "Drop image here";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'>
+    <rect width='100%' height='100%' fill='#f3f4f6'/>
+    <rect x='20' y='20' width='160' height='160' fill='none' stroke='#c7cdd4' stroke-width='2' stroke-dasharray='6 6'/>
+    <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#9aa3ab' font-family='sans-serif' font-size='12'>${text}</text>
+  </svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+function setPlaceholder(){
+  // 首次默认英文；之后跟随当前语言
+  const ph = generatePlaceholder(lang);
+  document.getElementById("original").src = ph;
+}
+
+/* ============== 颜色计算与渲染 ============== */
+const toHex2 = (v)=> v.toString(16).padStart(2,"0");
+const rgbToHex = ([r,g,b])=> "#" + toHex2(r) + toHex2(g) + toHex2(b);
+const hexCss = (rgb)=> `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+const clamp = (x,a,b)=> Math.max(a, Math.min(b, x));
+const euclid2 = (a,b)=>{ const dr=a[0]-b[0], dg=a[1]-b[1], db=a[2]-b[2]; return dr*dr+dg*dg+db*db; };
+const randInt = (n)=> Math.floor(Math.random()*n);
+
+function kmeansPlusPlusInit(points, k){
+  const centroids=[ points[randInt(points.length)] ];
+  while(centroids.length<k){
+    const d2 = points.map(p=>{ let m=Infinity; for(const c of centroids){ const d=euclid2(p,c); if(d<m)m=d; } return m; });
+    const sum = d2.reduce((a,b)=>a+b,0);
+    let r=Math.random()*sum; let chosen=null;
+    for(let i=0;i<points.length;i++){ r-=d2[i]; if(r<=0){ chosen=points[i]; break; } }
+    centroids.push(chosen || points[randInt(points.length)]);
+  }
+  return centroids.map(c=>[...c]);
+}
+function kmeans(points, k, maxIter=20){
+  if(points.length<k) k = points.length;
+  let centroids = kmeansPlusPlusInit(points, k);
+  let labels = new Array(points.length).fill(0);
+  for(let iter=0; iter<maxIter; iter++){
+    let changed=false;
+    for(let i=0;i<points.length;i++){
+      let best=0, bd=Infinity, p=points[i];
+      for(let c=0;c<centroids.length;c++){ const d=euclid2(p,centroids[c]); if(d<bd){ bd=d; best=c; } }
+      if(labels[i]!==best){ labels[i]=best; changed=true; }
+    }
+    if(!changed && iter>0) break;
+    const sum=centroids.map(()=>[0,0,0]); const cnt=centroids.map(()=>0);
+    for(let i=0;i<points.length;i++){
+      const c=labels[i];
+      sum[c][0]+=points[i][0]; sum[c][1]+=points[i][1]; sum[c][2]+=points[i][2]; cnt[c]++;
+    }
+    for(let c=0;c<centroids.length;c++){
+      if(cnt[c]>0){
+        centroids[c][0]=Math.round(sum[c][0]/cnt[c]);
+        centroids[c][1]=Math.round(sum[c][1]/cnt[c]);
+        centroids[c][2]=Math.round(sum[c][2]/cnt[c]);
+      }else{
+        centroids[c]=points[randInt(points.length)];
+      }
+    }
+  }
+  return { centroids, labels };
+}
+function mergeSmallClusters(result, points, minPct){
+  const { centroids, labels } = result;
+  const n=points.length;
+  const counts = centroids.map(()=>0);
+  for(const lab of labels) counts[lab]++;
+  const big = new Set();
+  for(let c=0;c<centroids.length;c++){ if(counts[c]/n >= minPct) big.add(c); }
+  if(big.size===centroids.length) return { centroids, labels };
+  const newLabels = labels.slice();
+  for(let i=0;i<points.length;i++){
+    const lab=labels[i];
+    if(!big.has(lab)){
+      let best=null, bd=Infinity;
+      for(const c of big){ const d=euclid2(points[i],centroids[c]); if(d<bd){ bd=d; best=c; } }
+      if(best!==null) newLabels[i]=best;
+    }
+  }
+  const bigList=[...big];
+  const idxMap=new Map(bigList.map((c,idx)=>[c,idx]));
+  const newC=bigList.map(()=>[0,0,0]); const newCnt=bigList.map(()=>0);
+  for(let i=0;i<points.length;i++){
+    const lab=newLabels[i]; const j=idxMap.get(lab);
+    newC[j][0]+=points[i][0]; newC[j][1]+=points[i][1]; newC[j][2]+=points[i][2]; newCnt[j]++;
+  }
+  for(let j=0;j<newC.length;j++){
+    if(newCnt[j]>0){
+      newC[j][0]=Math.round(newC[j][0]/newCnt[j]);
+      newC[j][1]=Math.round(newC[j][1]/newCnt[j]);
+      newC[j][2]=Math.round(newC[j][2]/newCnt[j]);
+    }
+  }
+  return { centroids:newC, labels:newLabels };
+}
+async function getPixelsFromFile(file){
+  const blobURL = URL.createObjectURL(file);
+  const img = new Image();
+  img.src = blobURL;
+  await img.decode();
+  document.getElementById("original").src = blobURL; // 预览
+
+  const maxSide = 300;
+  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.floor(img.naturalWidth * scale));
+  const h = Math.max(1, Math.floor(img.naturalHeight * scale));
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  URL.revokeObjectURL(blobURL);
+
+  const { data } = ctx.getImageData(0,0,w,h);
+  const target = 50000;
+  const step = Math.max(1, Math.floor(Math.sqrt((w*h)/target)));
+  const pts = [];
+  for(let y=0;y<h;y+=step){
+    for(let x=0;x<w;x+=step){
+      const off=(y*w + x)*4;
+      const r=data[off], g=data[off+1], b=data[off+2], a=data[off+3];
+      if(a===0) continue;
+      pts.push([r,g,b]);
+    }
+  }
+  return pts;
+}
+function drawBands(canvas, colors, size, orientation="vertical"){
+  const width=size, height=size;
+  canvas.width=width; canvas.height=height;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,width,height);
+  if(!colors.length) return;
+  if(orientation==="vertical"){
+    const raw = colors.map(c=>c.pct*width);
+    const flo = raw.map(Math.floor);
+    let used=flo.reduce((a,b)=>a+b,0), remain = width - used;
+    const order = raw.map((v,i)=>({i, f:v-Math.floor(v)})).sort((a,b)=>b.f-a.f).map(o=>o.i);
+    const bandW = flo.slice(); for(let t=0;t<remain;t++) bandW[order[t]]++;
+    let x=0; colors.forEach((c,i)=>{ const w=bandW[i]; ctx.fillStyle=hexCss(c.rgb); ctx.fillRect(x,0,w,height); x+=w; });
+  }else{
+    const raw = colors.map(c=>c.pct*height);
+    const flo = raw.map(Math.floor);
+    let used=flo.reduce((a,b)=>a+b,0), remain = height - used;
+    const order = raw.map((v,i)=>({i, f:v-Math.floor(v)})).sort((a,b)=>b.f-a.f).map(o=>o.i);
+    const bandH = flo.slice(); for(let t=0;t<remain;t++) bandH[order[t]]++;
+    let y=0; colors.forEach((c,i)=>{ const h=bandH[i]; ctx.fillStyle=hexCss(c.rgb); ctx.fillRect(0,y,width,h); y+=h; });
+  }
+}
+
+/* ======== State & UI wiring ======== */
+const els = {
+  drop: document.getElementById("dropArea"),
+  file: document.getElementById("file"),
+  k: document.getElementById("k"),
+  minPct: document.getElementById("minPct"),
+  minPctR: document.getElementById("minPctRange"),
+  maxIter: document.getElementById("maxIter"),
+  orientRadios: document.querySelectorAll("input[name='orient']"),
+  outSize: document.getElementById("outSize"),
+  outSizeR: document.getElementById("outSizeRange"),
+  paletteList: document.getElementById("paletteList"),
+  preview: document.getElementById("preview"),
+  distText: document.getElementById("distText"),
+  download: document.getElementById("download"),
+  original: document.getElementById("original"),
+};
+let paletteAll = []; // [{rgb, hex, pct, enabled}]
+
+function syncPair(a,b, min, max){
+  const sync = (src, dst) => { dst.value = clamp(parseFloat(src.value || "0"), min, max); renderPreview(); };
+  a.addEventListener("input", ()=>sync(a,b,min,max));
+  b.addEventListener("input", ()=>sync(b,a,min,max));
+}
+syncPair(els.minPctR, els.minPct, 0, 0.2);
+// 单一尺寸滑块（正方形）
+(function(){
+  const range = document.getElementById("outSizeRange");
+  const num   = document.getElementById("outSize");
+  const apply = ()=>{ num.value = range.value; renderPreview(); };
+  const applyNum = ()=>{ range.value = clamp(parseInt(num.value||"100",10), 32, 2000); renderPreview(); };
+  range.addEventListener("input", apply);
+  num.addEventListener("input", applyNum);
+})();
+function getOrientation(){ return Array.from(els.orientRadios).find(r=>r.checked)?.value || "vertical"; }
+
+function renderPaletteList(){
+  const list = els.paletteList;
+  list.innerHTML = "";
+  if(!paletteAll.length){
+    list.textContent = I18N[lang].noColors;
+    return;
+  }
+  paletteAll.forEach((c, idx)=>{
+    const line = document.createElement("div");
+    line.className = "color-item";
+    line.innerHTML = `
+      <input type="checkbox" data-i="${idx}" ${c.enabled ? "checked": ""} aria-label="toggle color"/>
+      <div class="swatch" style="background:${hexCss(c.rgb)}"></div>
+      <div><strong>${c.hex}</strong> <span class="muted"> ${(c.pct*100).toFixed(2)}%</span></div>
+      <button class="btn" data-copy="${c.hex}" title="Copy HEX">HEX</button>
+    `;
+    list.appendChild(line);
+  });
+  list.querySelectorAll("input[type='checkbox']").forEach(chk=>{
+    chk.addEventListener("change", (e)=>{
+      const i = parseInt(e.target.getAttribute("data-i"),10);
+      paletteAll[i].enabled = e.target.checked;
+      renderPreview();
+    });
+  });
+  list.querySelectorAll("button[data-copy]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const hex = btn.getAttribute("data-copy");
+      try { await navigator.clipboard.writeText(hex); btn.textContent="✓"; setTimeout(()=>btn.textContent="HEX",800); } catch {}
+    });
+  });
+}
+function normalizedSelected(){
+  const sel = paletteAll.filter(c=>c.enabled);
+  const sum = sel.reduce((a,b)=>a+b.pct, 0);
+  if(sum<=0) return [];
+  return sel.map(c=>({ ...c, pct: c.pct / sum }));
+}
+function renderPreview(){
+  const size = clamp(parseInt(document.getElementById("outSize").value || "100",10), 32, 2000);
+  const orient = getOrientation();
+  const colors = normalizedSelected();
+  drawBands(els.preview, colors, size, orient);
+  els.download.disabled = colors.length===0;
+  els.distText.textContent = colors.length
+    ? colors.map(c=>`${c.hex} ${(c.pct*100).toFixed(2)}%`).join(" · ")
+    : I18N[lang].noneSelected;
+}
+
+/* Auto analyze on file set or drop */
+async function analyzeFromFile(file){
+  try{
+    const points = await getPixelsFromFile(file);
+    const k = clamp(parseInt(els.k.value || "5",10), 2, 12);
+    const minPct = clamp(parseFloat(els.minPct.value || "0.02"), 0, 0.2);
+    const maxIter = clamp(parseInt(els.maxIter.value || "20",10), 5, 100);
+
+    const km = kmeans(points, k, maxIter);
+    const merged = mergeSmallClusters(km, points, minPct);
+
+    const counts = Array(merged.centroids.length).fill(0);
+    for(const lab of merged.labels) counts[lab]++;
+    const total = merged.labels.length;
+
+    const base = merged.centroids.map((c,i)=>({
+      rgb: c, hex: rgbToHex(c), pct: counts[i]/total
+    })).filter(c=>c.pct>0).sort((a,b)=>b.pct-a.pct);
+
+    paletteAll = base.map(c=>({ ...c, enabled:true }));
+    renderPaletteList();
+    renderPreview();
+  }catch(err){
+    alert((I18N[lang].fail) + (err?.message || err));
+    console.error(err);
+  }
+}
+
+/* Drag & Drop */
+["dragenter","dragover"].forEach(evt=>{
+  els.drop.addEventListener(evt, e=>{ e.preventDefault(); e.stopPropagation(); els.drop.classList.add("drag"); });
+});
+["dragleave","drop"].forEach(evt=>{
+  els.drop.addEventListener(evt, e=>{ e.preventDefault(); e.stopPropagation(); els.drop.classList.remove("drag"); });
+});
+els.drop.addEventListener("drop", e=>{
+  const file = [...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith("image/"));
+  if(file){ document.getElementById("file").files = e.dataTransfer.files; analyzeFromFile(file); }
+});
+
+/* File input */
+els.file.addEventListener("change", ()=>{
+  const f = els.file.files?.[0];
+  if(f) analyzeFromFile(f);
+});
+
+/* Live updates */
+[els.k, els.minPct, els.minPctR, els.maxIter].forEach(el=>{
+  el.addEventListener("input", ()=>{
+    const f = els.file.files?.[0];
+    if(f) analyzeFromFile(f);
+  });
+});
+document.querySelectorAll("input[name='orient']").forEach(r=>r.addEventListener("change", renderPreview));
+
+/* Download PNG */
+document.getElementById("download").addEventListener("click", ()=>{
+  const a = document.createElement("a");
+  a.download = `palette_${els.preview.width}x${els.preview.height}.png`;
+  a.href = els.preview.toDataURL("image/png");
+  a.click();
+});
+
+/* Init：默认中文界面，但占位图默认英文 */
+applyLang();
+setPlaceholder(); // 默认 placeholder 英文（因 lang 初值传入 setPlaceholder）
+renderPreview();
+</script>
+</body>
+</html>
+
