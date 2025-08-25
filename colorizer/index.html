@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Texture Colorizer – 网格滤镜工具</title>
+  <meta name="description" content="给灰白纹理图快速着色，网格预览，点击可导出。" />
+  <style>
+    :root{
+      --bg: #0b0c10;
+      --panel: #12141a;
+      --muted: #8892a0;
+      --text: #e6edf3;
+      --accent: #44c2ff;
+      --accent-2: #6ee7b7;
+      --ring: #2b303b;
+      --gap: 12px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: linear-gradient(180deg, #0b0c10, #0f1117 40%, #0b0c10 100%);
+      color:var(--text);
+    }
+    header{
+      position:sticky; top:0; z-index:10;
+      backdrop-filter: blur(8px);
+      background:color-mix(in oklab, var(--panel) 70%, transparent);
+      border-bottom:1px solid var(--ring);
+    }
+    .wrap{max-width:1200px; margin:0 auto; padding:16px;}
+    .title{display:flex; align-items:center; gap:12px;}
+    .logo{width:28px;height:28px;border-radius:8px;background:conic-gradient(from 0deg, #7dd3fc, #a78bfa, #f472b6, #facc15, #34d399, #7dd3fc); box-shadow:0 0 0 1px #0007 inset}
+    h1{font-size:18px;margin:0}
+
+    .controls{
+      display:grid; grid-template-columns: repeat(12, 1fr); gap:var(--gap);
+      padding-top:12px;
+    }
+    .card{
+      background:color-mix(in oklab, var(--panel) 85%, #0000);
+      border:1px solid var(--ring);
+      border-radius:12px; padding:12px;
+      box-shadow: 0 10px 30px #0007 inset, 0 6px 24px #0004;
+    }
+    .card h3{margin:0 0 10px 0; font-size:14px; color:var(--muted)}
+    label{font-size:12px; color:var(--muted)}
+    input[type="range"], select, input[type="color"], input[type="text"], button{
+      width:100%;
+      padding:10px 12px; border-radius:10px; border:1px solid var(--ring);
+      background:#0f1218; color:var(--text);
+      outline: none;
+    }
+    input[type="range"]{padding:0}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:var(--gap);}
+    .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:var(--gap);}
+    .inline{display:flex; align-items:center; gap:8px}
+
+    .dropzone{
+      display:flex; align-items:center; justify-content:center; text-align:center;
+      min-height:140px; border:1.5px dashed #2b3340; border-radius:14px; cursor:pointer;
+      background: repeating-conic-gradient(from 0deg, #10151d 0 25%, #0e131b 0 50%) 0/24px 24px;
+      transition: border-color .2s, transform .15s;
+    }
+    .dropzone:hover{border-color:var(--accent)}
+    .dropzone.drag{transform: scale(0.99); border-color: var(--accent-2)}
+    .dropzone input{display:none}
+    .dz-text{color:var(--muted); font-size:13px}
+
+    .grid{display:grid; gap:var(--gap); grid-template-columns: repeat(auto-fill, minmax(var(--min, 180px), 1fr));}
+    .tile{
+      position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--ring);
+      background: #111;
+      box-shadow: 0 2px 10px #0009;
+    }
+    .tile canvas{display:block; width:100%; height:auto;}
+    .chip{position:absolute; left:8px; top:8px; font-size:12px; padding:6px 8px; border-radius:8px; color:#0a0a0a; font-weight:600; background:#fff; mix-blend: soft-light;}
+    .tile footer{
+      display:flex; align-items:center; justify-content:space-between; gap:6px;
+      padding:8px 10px; font-size:12px; color:var(--muted);
+      background:linear-gradient(180deg, #0b0f14, #0a0d12);
+      border-top:1px solid var(--ring);
+    }
+    .tile button{border-radius:8px; padding:6px 8px; font-size:12px}
+
+    .gridbar{display:flex; align-items:center; justify-content:space-between; gap:16px; margin:16px 0;}
+
+    dialog{border:none; border-radius:14px; padding:0; max-width:min(92vw, 1200px); background: #0d1117; color:var(--text);}
+    dialog::backdrop{background:#000a}
+    .modal-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--ring)}
+    .modal-body{padding:12px 14px}
+    .modal-body canvas{max-width:100%; height:auto; display:block; border-radius:10px;}
+
+    .hint{font-size:12px; color:var(--muted)}
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; background:#0e131b; border:1px solid var(--ring); padding:2px 6px; border-radius:6px}
+
+    .footer{opacity:.7; font-size:12px; text-align:center; padding:12px 0 24px}
+    .sr-only{position:absolute!important; height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="title">
+        <div class="logo" aria-hidden="true"></div>
+        <h1>Texture Colorizer · 纹理着色网格工具</h1>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="app">
+    <section class="controls">
+      <div class="card" style="grid-column: span 6">
+        <h3>1) 上传灰白纹理图</h3>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="file" accept="image/*" />
+          <div>
+            <div style="font-size:14px; margin-bottom:6px">拖拽图片到此处，或点击选择</div>
+            <div class="dz-text">建议使用无背景的灰白纹理（如纸张、布料、颗粒等）。支持 JPG/PNG/WebP。</div>
+          </div>
+        </label>
+        <div id="imgInfo" class="hint" style="margin-top:8px; display:none;"></div>
+      </div>
+
+      <div class="card" style="grid-column: span 6">
+        <h3>2) 调整渲染参数</h3>
+        <div class="row">
+          <label>滤镜模式
+            <select id="mode">
+              <option value="colorize" selected>HSL 着色（保留明暗）</option>
+              <option value="multiply">乘法混合 Multiply</option>
+              <option value="screen">滤色 Screen</option>
+              <option value="overlay">叠加 Overlay</option>
+              <option value="softlight">柔光 Soft-Light</option>
+            </select>
+          </label>
+          <label>强度 <span id="strengthVal" class="hint"></span>
+            <input type="range" id="strength" min="0" max="100" value="80" />
+          </label>
+        </div>
+        <div class="row">
+          <label>网格列数 <span id="colsVal" class="hint"></span>
+            <input type="range" id="cols" min="2" max="8" value="4" />
+          </label>
+          <label>预览尺寸 <span id="sizeVal" class="hint"></span>
+            <input type="range" id="tileSize" min="120" max="320" value="200" />
+          </label>
+        </div>
+        <div class="row3" style="margin-top:6px">
+          <label>自定义颜色
+            <div class="inline">
+              <input type="color" id="customColor" value="#00a2ff" title="选择颜色" />
+              <input type="text" id="customHex" placeholder="#RRGGBB 或 hsl(...)" />
+              <button id="addColor">添加到调色板</button>
+            </div>
+          </label>
+        </div>
+        <div class="hint" style="margin-top:6px">提示：按 <span class="kbd">G</span> 切换网格列数，按 <span class="kbd">S</span> 保存当前选中图。</div>
+      </div>
+
+      <div class="card" style="grid-column: span 12">
+        <h3>3) 选择调色板</h3>
+        <div class="row">
+          <label>预设方案
+            <select id="palette">
+              <option value="wheel24">色轮 24 色（高饱和）</option>
+              <option value="wheel12">色轮 12 色（标准）</option>
+              <option value="soft12">柔和 12 色（低饱和）</option>
+              <option value="material">Material 基础 10 色</option>
+              <option value="grads">蓝绿系 12 色</option>
+            </select>
+          </label>
+          <div>
+            <label class="inline" style="margin-top:22px">
+              <input type="checkbox" id="labels" checked /> 显示颜色标签
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="gridbar">
+      <div class="hint">已加载：<span id="state">等待上传图片…</span></div>
+      <div class="inline">
+        <button id="regen">重新生成预览</button>
+        <button id="clear">清空图像</button>
+      </div>
+    </section>
+
+    <section id="grid" class="grid" aria-live="polite"></section>
+
+    <p class="footer">© Texture Colorizer – 纯前端离线运行。上传图片不会离开本地设备。</p>
+  </main>
+
+  <dialog id="modal">
+    <div class="modal-head">
+      <div class="inline">
+        <strong id="modalTitle">预览</strong>
+        <span id="modalMeta" class="hint"></span>
+      </div>
+      <div class="inline">
+        <button id="download">下载 PNG</button>
+        <button id="close">关闭</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <canvas id="fullCanvas"></canvas>
+    </div>
+  </dialog>
+
+  <script>
+  // ---------- 工具函数 ----------
+  const $ = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => [...el.querySelectorAll(sel)];
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+  function hexToRgb(hex){
+    if(!hex) return {r:0,g:0,b:0};
+    if(hex.startsWith('hsl')){ // 支持 hsl() 输入
+      const m = hex.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/i);
+      if(m){
+        const [h,s,l] = [parseFloat(m[1]), parseFloat(m[2])/100, parseFloat(m[3])/100];
+        return hslToRgb(h, s, l);
+      }
+    }
+    let h = hex.replace('#','').trim();
+    if(h.length===3) h = h.split('').map(c=>c+c).join('');
+    const num = parseInt(h, 16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+  function rgbToHex(r,g,b){
+    return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+  }
+  function rgbToHsl(r,g,b){
+    r/=255; g/=255; b/=255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    let h, s, l = (max+min)/2;
+    if(max===min){ h=s=0; }
+    else{
+      const d = max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max){
+        case r: h=(g-b)/d+(g<b?6:0); break;
+        case g: h=(b-r)/d+2; break;
+        case b: h=(r-g)/d+4; break;
+      }
+      h*=60;
+    }
+    return {h, s, l};
+  }
+  function hslToRgb(h,s,l){
+    h = (h%360 + 360)%360;
+    const C = (1 - Math.abs(2*l - 1)) * s;
+    const X = C * (1 - Math.abs((h/60)%2 - 1));
+    const m = l - C/2;
+    let r=0,g=0,b=0;
+    if(0<=h && h<60){ r=C; g=X; b=0; }
+    else if(60<=h && h<120){ r=X; g=C; b=0; }
+    else if(120<=h && h<180){ r=0; g=C; b=X; }
+    else if(180<=h && h<240){ r=0; g=X; b=C; }
+    else if(240<=h && h<300){ r=X; g=0; b=C; }
+    else { r=C; g=0; b=X; }
+    return { r: Math.round((r+m)*255), g: Math.round((g+m)*255), b: Math.round((b+m)*255) };
+  }
+  function luminance(r,g,b){
+    // 相对亮度（假设 sRGB），输入 0..255
+    return 0.2126*r + 0.7152*g + 0.0722*b; // 0..255
+  }
+
+  function drawCover(ctx, img, W, H){
+    const iw = img.width, ih = img.height; const ir = iw/ih, r = W/H;
+    let sw, sh, sx, sy;
+    if(ir > r){ sh = ih; sw = sh*r; sx = (iw - sw)/2; sy = 0; }
+    else { sw = iw; sh = sw/r; sx = 0; sy = (ih - sh)/2; }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+  }
+
+  // ---------- 混合模式 ----------
+  function blendMultiply(a, b){ return a*b; }
+  function blendScreen(a, b){ return 1 - (1-a)*(1-b); }
+  function blendOverlay(a, b){ return a<0.5 ? 2*a*b : 1 - 2*(1-a)*(1-b); }
+  function blendSoftLight(a, b){ return (1-2*b)*a*a + 2*b*a; }
+
+  // 将图像进行“色相着色”：使用目标颜色的 H、S，保持像素的亮度为 L
+  function colorizePixel(px, py, pz){ // px,py,pz ∈ [0,1]
+    // 这里不做，函数体在 applyTint 中根据目标色动态设定
+    return [px,py,pz];
+  }
+
+  // 主处理：对任意画布应用颜色滤镜
+  function applyTintToCanvas(canvas, image, color, mode='colorize', strength=0.8){
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    // 画原图（cover）
+    drawCover(ctx, image, canvas.width, canvas.height);
+    const imgData = ctx.getImageData(0,0,canvas.width, canvas.height);
+    const data = imgData.data;
+
+    const {r:cr, g:cg, b:cb} = hexToRgb(color);
+    const cR = cr/255, cG = cg/255, cB = cb/255;
+    const {h:ch, s:cs} = rgbToHsl(cr,cg,cb);
+
+    for(let i=0;i<data.length;i+=4){
+      const r = data[i]/255, g = data[i+1]/255, b = data[i+2]/255;
+      let nr=r, ng=g, nb=b;
+
+      if(mode==='colorize'){
+        // 以像素相对亮度近似 L
+        const Y = luminance(data[i], data[i+1], data[i+2]) / 255; // 0..1
+        const rgbC = hslToRgb(ch, cs, Y);
+        nr = rgbC.r/255; ng = rgbC.g/255; nb = rgbC.b/255;
+      } else if(mode==='multiply'){
+        nr = blendMultiply(r, cR); ng = blendMultiply(g, cG); nb = blendMultiply(b, cB);
+      } else if(mode==='screen'){
+        nr = blendScreen(r, cR); ng = blendScreen(g, cG); nb = blendScreen(b, cB);
+      } else if(mode==='overlay'){
+        nr = blendOverlay(r, cR); ng = blendOverlay(g, cG); nb = blendOverlay(b, cB);
+      } else if(mode==='softlight'){
+        nr = blendSoftLight(r, cR); ng = blendSoftLight(g, cG); nb = blendSoftLight(b, cB);
+      }
+
+      // 强度混合：原图 => 混合图
+      const s = strength;
+      data[i  ] = Math.round(255 * (r*(1-s) + nr*s));
+      data[i+1] = Math.round(255 * (g*(1-s) + ng*s));
+      data[i+2] = Math.round(255 * (b*(1-s) + nb*s));
+      // 保留原始 alpha
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // ---------- 生成调色板 ----------
+  function genWheel(n=12, s=0.85, l=0.50){
+    return Array.from({length:n}, (_,i)=>{
+      const h = Math.round((360/n)*i);
+      const {r,g,b} = hslToRgb(h, s, l);
+      return rgbToHex(r,g,b);
+    });
+  }
+  function genSoft(n=12){ return genWheel(n, 0.45, 0.60); }
+  function materialBase(){
+    return ['#f44336','#e91e63','#9c27b0','#673ab7','#3f51b5','#2196f3','#03a9f4','#00bcd4','#009688','#4caf50'];
+  }
+  function blueGreen(){ // 蓝绿过渡
+    return [
+      '#e6f0ff','#cfe7ff','#b8ddff','#a1d4ff','#8acaff','#74c0ff',
+      '#5db6f2','#46abc9','#30a1a1','#2a8f87','#247e6d','#1f6c54'
+    ];
+  }
+
+  // ---------- 状态 ----------
+  const state = {
+    img: null,
+    imgURL: '',
+    colors: genWheel(24, 0.85, 0.55),
+    mode: 'colorize',
+    strength: 0.8,
+    cols: 4,
+    tileSize: 200,
+    labels: true,
+    lastClicked: null,
+  };
+
+  // ---------- UI 绑定 ----------
+  const grid = $('#grid');
+  const dz = $('#dropzone');
+  const file = $('#file');
+  const mode = $('#mode');
+  const strength = $('#strength');
+  const strengthVal = $('#strengthVal');
+  const cols = $('#cols');
+  const colsVal = $('#colsVal');
+  const tileSize = $('#tileSize');
+  const sizeVal = $('#sizeVal');
+  const palette = $('#palette');
+  const labels = $('#labels');
+  const addColor = $('#addColor');
+  const customColor = $('#customColor');
+  const customHex = $('#customHex');
+  const regen = $('#regen');
+  const clearBtn = $('#clear');
+  const info = $('#imgInfo');
+  const stateSpan = $('#state');
+
+  function setHints(){
+    strengthVal.textContent = `(${Math.round(state.strength*100)}%)`;
+    colsVal.textContent = `(${state.cols} 列)`;
+    sizeVal.textContent = `(${state.tileSize}px)`;
+  }
+
+  function updateCSS(){
+    grid.style.setProperty('--min', state.tileSize + 'px');
+  }
+
+  function onFile(fileObj){
+    const url = URL.createObjectURL(fileObj);
+    const img = new Image();
+    img.onload = ()=>{
+      state.img = img; state.imgURL = url;
+      info.style.display = 'block';
+      info.textContent = `源图尺寸：${img.width} × ${img.height}`;
+      stateSpan.textContent = '已加载图片，正在生成预览…';
+      renderGrid();
+    };
+    img.onerror = ()=>{
+      URL.revokeObjectURL(url);
+      alert('无法加载该图片，请重试');
+    };
+    img.src = url;
+  }
+
+  dz.addEventListener('click', ()=> file.click());
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
+  dz.addEventListener('drop', e=>{
+    e.preventDefault(); dz.classList.remove('drag');
+    const f = e.dataTransfer.files?.[0]; if(f) onFile(f);
+  });
+  file.addEventListener('change', e=>{ const f = e.target.files?.[0]; if(f) onFile(f); });
+
+  mode.addEventListener('change', ()=>{ state.mode = mode.value; renderGrid(); });
+  strength.addEventListener('input', ()=>{ state.strength = strength.value/100; setHints(); renderGridLight(); });
+  cols.addEventListener('input', ()=>{ state.cols = +cols.value; grid.style.gridTemplateColumns = `repeat(${state.cols}, 1fr)`; setHints(); });
+  tileSize.addEventListener('input', ()=>{ state.tileSize = +tileSize.value; updateCSS(); setHints(); renderGrid(); });
+  labels.addEventListener('change', ()=>{ state.labels = labels.checked; $$('.chip').forEach(c=>c.style.display = state.labels? 'inline-flex':'none'); });
+
+  palette.addEventListener('change', ()=>{
+    const v = palette.value;
+    if(v==='wheel24') state.colors = genWheel(24, 0.85, 0.55);
+    if(v==='wheel12') state.colors = genWheel(12, 0.85, 0.55);
+    if(v==='soft12') state.colors = genSoft(12);
+    if(v==='material') state.colors = materialBase();
+    if(v==='grads') state.colors = blueGreen();
+    renderGrid();
+  });
+
+  addColor.addEventListener('click', ()=>{
+    const hex = (customHex.value || customColor.value || '').trim();
+    if(!hex) return;
+    try{
+      const {r,g,b} = hexToRgb(hex); // 校验
+      const out = rgbToHex(r,g,b);
+      state.colors.unshift(out);
+      customHex.value='';
+      renderGrid();
+    }catch(err){ alert('颜色格式不正确，示例：#00a2ff 或 hsl(200,80%,50%)'); }
+  });
+
+  regen.addEventListener('click', ()=> renderGrid());
+  clearBtn.addEventListener('click', ()=>{
+    state.img = null; state.imgURL=''; grid.innerHTML=''; info.style.display='none'; stateSpan.textContent='等待上传图片…';
+  });
+
+  // 快捷键
+  window.addEventListener('keydown', (e)=>{
+    if(e.key.toLowerCase()==='g'){
+      cols.value = String(clamp(state.cols % 8 + 1, 2, 8));
+      cols.dispatchEvent(new Event('input'));
+    }
+  });
+
+  // ---------- 渲染 ----------
+  function makeTile(color){
+    const wrap = document.createElement('div');
+    wrap.className = 'tile';
+    const chip = document.createElement('span');
+    chip.className = 'chip'; chip.textContent = color.toUpperCase();
+    const cvs = document.createElement('canvas');
+    cvs.width = state.tileSize; cvs.height = state.tileSize;
+    const foot = document.createElement('footer');
+    const btn = document.createElement('button'); btn.textContent = '查看/下载';
+    const meta = document.createElement('span'); meta.textContent = state.mode;
+
+    foot.appendChild(meta); foot.appendChild(btn);
+    wrap.appendChild(cvs); wrap.appendChild(chip); wrap.appendChild(foot);
+
+    if(!state.labels) chip.style.display='none';
+
+    btn.addEventListener('click', ()=> openModal(color));
+    wrap.addEventListener('click', (ev)=>{ if(ev.target===cvs) openModal(color); });
+
+    // 首次绘制
+    if(state.img){ applyTintToCanvas(cvs, state.img, color, state.mode, state.strength); }
+    return wrap;
+  }
+
+  function renderGrid(){
+    grid.innerHTML = '';
+    updateCSS(); setHints();
+    grid.style.gridTemplateColumns = `repeat(${state.cols}, 1fr)`;
+    if(!state.img){ stateSpan.textContent = '等待上传图片…'; return; }
+    const frag = document.createDocumentFragment();
+    for(const c of state.colors){ frag.appendChild(makeTile(c)); }
+    grid.appendChild(frag);
+    stateSpan.textContent = `预览 ${state.colors.length} 色 · 模式 ${state.mode}`;
+  }
+
+  function renderGridLight(){
+    // 仅更新画布（调强度时更顺滑）
+    $$('.tile').forEach((tile, idx)=>{
+      const cvs = $('canvas', tile);
+      const chip = $('.chip', tile);
+      const color = chip.textContent;
+      if(state.img && cvs){ applyTintToCanvas(cvs, state.img, color, state.mode, state.strength); }
+    });
+  }
+
+  // ---------- Modal 预览 & 导出 ----------
+  const modal = $('#modal');
+  const fullCanvas = $('#fullCanvas');
+  const modalTitle = $('#modalTitle');
+  const modalMeta = $('#modalMeta');
+  const downloadBtn = $('#download');
+  const closeBtn = $('#close');
+
+  function openModal(color){
+    if(!state.img) return;
+    // 以原始尺寸生成（限制最大边 2000，避免过大）
+    const maxSide = 2000;
+    const iw = state.img.width, ih = state.img.height;
+    const scale = Math.min(1, maxSide / Math.max(iw, ih));
+    fullCanvas.width = Math.round(iw*scale);
+    fullCanvas.height = Math.round(ih*scale);
+    applyTintToCanvas(fullCanvas, state.img, color, state.mode, state.strength);
+    modalTitle.textContent = '预览 ' + color.toUpperCase();
+    modalMeta.textContent = `模式 ${state.mode} · 强度 ${Math.round(state.strength*100)}% · 输出 ${fullCanvas.width}×${fullCanvas.height}`;
+    modal.showModal();
+    state.lastClicked = color;
+  }
+  downloadBtn.addEventListener('click', ()=>{
+    if(!fullCanvas.width) return;
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    a.download = `colorized_${(state.lastClicked||'color').replace('#','')}_${ts}.png`;
+    a.href = fullCanvas.toDataURL('image/png');
+    a.click();
+  });
+  closeBtn.addEventListener('click', ()=> modal.close());
+  modal.addEventListener('close', ()=> { /* 清理如需 */ });
+
+  // 初始化 hint
+  setHints(); updateCSS();
+  </script>
+</body>
+</html>
