@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  
+  <!-- 主页 -->
+  <url>
+    <loc>https://cyang39.github.io/</loc>
+    <lastmod>2025-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/"/>
+  </url>
+  
+  <!-- 图像色彩提取器 -->
+  <url>
+    <loc>https://cyang39.github.io/palette/</loc>
+    <lastmod>2025-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/palette/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/palette/"/>
+  </url>
+  
+  <!-- 纹理着色工具 -->
+  <url>
+    <loc>https://cyang39.github.io/colorizer/</loc>
+    <lastmod>2025-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/colorizer/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/colorizer/"/>
+  </url>
+  
+</urlset>

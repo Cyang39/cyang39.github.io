@@ -31,6 +31,70 @@
   <!-- Simple favicon (optional) -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Verdana, sans-serif' fill='%23a7f3d0'%3EC%3C/text%3E%3C/svg%3E">
 
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
+  
+  <!-- iOS Safari specific -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cyang39 Tools">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Crect width='180' height='180' rx='20' fill='%230a0a0a'/%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' font-size='90' font-family='Verdana, sans-serif' fill='%23a7f3d0'%3EC%3C/text%3E%3C/svg%3E">
+  
+  <!-- SEO 优化 -->
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml">
+  <meta name="author" content="Cyang39">
+  <meta name="generator" content="手工编码">
+  <meta name="language" content="zh-CN">
+  <meta name="geo.region" content="CN">
+  <meta name="theme-color" content="#7dd3fc">
+  <meta name="msapplication-navbutton-color" content="#7dd3fc">
+  <meta name="msapplication-TileColor" content="#0b0c10">
+  
+  <!-- 结构化数据 -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Cyang39 实用工具集",
+    "alternateName": "Cyang39 Tools",
+    "url": "https://cyang39.github.io/",
+    "description": "Cyang39 的色彩和图像工具集。试试图像色彩提取器和纹理着色工具，完全在浏览器中运行。",
+    "author": {
+      "@type": "Person",
+      "name": "Cyang39",
+      "url": "https://github.com/cyang39"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Cyang39",
+      "url": "https://github.com/cyang39"
+    },
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://cyang39.github.io/?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    },
+    "mainEntity": [
+      {
+        "@type": "WebApplication",
+        "name": "图像色彩提取器",
+        "description": "使用 K-Means 算法提取图片主色调，可选择颜色组合，调整水平/垂直色带布局和方块大小，本地导出 PNG 色卡。",
+        "url": "https://cyang39.github.io/palette/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Web Browser"
+      },
+      {
+        "@type": "WebApplication",
+        "name": "纹理着色工具",
+        "description": "为灰白纹理图快速着色，支持多种混合模式，网格预览效果，点击即可导出高质量 PNG。",
+        "url": "https://cyang39.github.io/colorizer/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Web Browser"
+      }
+    ]
+  }
+  </script>
+
   <style>
     :root {
       --bg: #0b0c10;
