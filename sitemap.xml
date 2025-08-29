@@ -42,4 +42,14 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/stitcher/"/>
   </url>
   
+  <!-- 1:1方形裁切器 -->
+  <url>
+    <loc>https://cyang39.github.io/square_cropper/</loc>
+    <lastmod>2025-08-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/square_cropper/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/square_cropper/"/>
+  </url>
+  
 </urlset>

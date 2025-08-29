@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>1:1 方形裁切器（长图切方块 · 尾片空白填充）</title>
+  <style>
+    :root{--line:#dcdce1;--fg:#0e0f12;--muted:#6b6f76;--panel:#f7f7fa;--chip:#eef0f3;--accent:#3b82f6;--danger:#ef4444}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--fg)}
+    #app{display:grid;grid-template-columns:2fr 1fr;min-height:100vh}
+    @media (max-width: 1024px){#app{grid-template-columns:1fr}}
+    #left{border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+    #right{display:flex;flex-direction:column;min-width:0}
+    header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
+    .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:12px;color:#333}
+    .meta{color:var(--muted);font-size:12px}
+
+    /* Viewer */
+    .viewerWrap{position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; min-height:320px}
+    canvas#viewer{display:block; width:100%; height:auto}
+    .viewerHint{position:absolute; inset:auto 8px 8px 8px; display:flex; justify-content:space-between; font-size:12px; color:#fff; background:linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.45)); padding:6px 8px; border-radius:8px}
+
+    /* Controls */
+    #controls{padding:12px;border-bottom:1px solid var(--line);background:var(--panel)}
+    #controls .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    label{display:inline-flex;gap:6px;align-items:center}
+    input[type="number"],input[type="text"],select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+    input[type="number"]{width:110px}
+    input[type="range"]{width:130px}
+    button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+    button.primary{background:#111;color:#fff;border-color:#111}
+    button.danger{border-color:var(--danger);color:var(--danger)}
+
+    /* Drop + thumbs */
+    #dropZone{margin:10px;border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:#555}
+    #thumbs{display:flex;flex-wrap:wrap;gap:8px;padding:10px;overflow:auto}
+    .thumb{border:1px solid var(--line);border-radius:8px;position:relative;cursor:pointer;background:#fff}
+    .thumb img{display:block;width:140px;height:96px;object-fit:cover}
+    .thumb .badge{position:absolute;left:6px;bottom:6px;background:#000b;color:#fff;font-size:11px;border-radius:6px;padding:2px 6px}
+    .thumb.active{outline:2px solid var(--accent)}
+
+    .split{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+<div id="app">
+  <section id="left">
+    <div class="viewerWrap">
+      <canvas id="viewer"></canvas>
+      <div class="viewerHint"><span id="vh-dim" class="meta"></span><span id="vh-slices" class="meta"></span></div>
+    </div>
+    <div class="meta">提示：点击右侧任意缩略图可在左侧查看切片覆盖预览；当最后一片不足 1:1 时会自动以白色空白填充为正方形。</div>
+  </section>
+
+  <aside id="right">
+    <header>
+      <strong>1:1 方形裁切器（支持尾片空白填充）</strong>
+      <span class="chip" id="countChip">0 张源图</span>
+    </header>
+
+    <div id="controls">
+      <div class="row">
+        <label>裁切模式
+          <select id="sizeMode">
+            <option value="auto" selected>自动（方边=短边）</option>
+            <option value="custom">自定义方边(px)</option>
+          </select>
+        </label>
+        <label>方边 <input type="number" id="squareSize" value="512" min="16" max="32767" disabled></label>
+        <label>重叠(px) <input type="number" id="overlap" value="0" min="0" max="500"></label>
+        <label>方向
+          <select id="direction">
+            <option value="auto" selected>自动</option>
+            <option value="vertical">纵向（上→下）</option>
+            <option value="horizontal">横向（左→右）</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="tailAlign"> 尾端对齐（不添加尾片）</label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>命名前缀 <input type="text" id="prefix" placeholder="留空则使用原文件名"></label>
+        <label>导出格式
+          <select id="fmt">
+            <option value="png" selected>PNG</option>
+            <option value="jpeg">JPEG</option>
+          </select>
+        </label>
+        <label id="qwrap" style="display:none">质量 <input type="range" id="quality" min="0.5" max="1" step="0.01" value="0.92"><span class="meta" id="qval">92%</span></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="cursor:pointer"><button>选择文件</button>
+          <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+        </label>
+        <button class="primary" id="downloadAll">下载全部切片</button>
+        <button class="danger" id="clear">清空</button>
+      </div>
+      <div class="meta" id="note"></div>
+    </div>
+
+    <div id="dropZone">
+      将图片拖入此处或直接在页面按 ⌘/Ctrl+V 粘贴（支持多图）
+    </div>
+
+    <div id="thumbs"></div>
+  </aside>
+</div>
+
+<script>
+(function(){
+  const MAX_DIM = 32767;
+  const state = {
+    items: [], // {id,url,width,height,name}
+    sel: -1,
+    cfg: {mode:'auto', size:512, overlap:0, dir:'auto', tail:false, fmt:'png', q:0.92, prefix:''}
+  };
+
+  // DOM
+  const viewer = document.getElementById('viewer');
+  const vhDim = document.getElementById('vh-dim');
+  const vhSlices = document.getElementById('vh-slices');
+  const countChip = document.getElementById('countChip');
+  const thumbs = document.getElementById('thumbs');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const sizeMode = document.getElementById('sizeMode');
+  const squareSize = document.getElementById('squareSize');
+  const overlapEl = document.getElementById('overlap');
+  const direction = document.getElementById('direction');
+  const tailAlign = document.getElementById('tailAlign');
+  const prefixEl = document.getElementById('prefix');
+  const fmtEl = document.getElementById('fmt');
+  const qwrap = document.getElementById('qwrap');
+  const qEl = document.getElementById('quality');
+  const qVal = document.getElementById('qval');
+  const note = document.getElementById('note');
+
+  document.querySelector('#controls label[style] button').addEventListener('click', ()=> fileInput.click());
+
+  sizeMode.addEventListener('change', ()=>{ state.cfg.mode=sizeMode.value; squareSize.disabled = (state.cfg.mode!=='custom'); renderAll(); });
+  squareSize.addEventListener('input', ()=>{ state.cfg.size = clampInt(squareSize.value,16,MAX_DIM); renderAll(); });
+  overlapEl.addEventListener('input', ()=>{ state.cfg.overlap = clampInt(overlapEl.value,0,500); renderAll(); });
+  direction.addEventListener('change', ()=>{ state.cfg.dir = direction.value; renderAll(); });
+  tailAlign.addEventListener('change', ()=>{ state.cfg.tail = tailAlign.checked; renderAll(); });
+  prefixEl.addEventListener('input', ()=>{ state.cfg.prefix = prefixEl.value.trim(); });
+  fmtEl.addEventListener('change', ()=>{ state.cfg.fmt = fmtEl.value; qwrap.style.display = state.cfg.fmt==='jpeg'?'':'none'; });
+  qEl.addEventListener('input', ()=>{ state.cfg.q = clampFloat(qEl.value,0.5,1); qVal.textContent = Math.round(state.cfg.q*100)+'%'; });
+
+  fileInput.addEventListener('change', e=> addFiles(Array.from(e.target.files||[])) );
+
+  // Paste
+  window.addEventListener('paste', async (e)=>{
+    const files=[]; for(const it of e.clipboardData.items||[]){ if(it.kind==='file'){ const f=it.getAsFile(); if(f && f.type.startsWith('image/')) files.push(f); } }
+    if (files.length){ e.preventDefault(); await addFiles(files); }
+  });
+
+  // Drag & drop
+  ['dragenter','dragover','dragleave','drop'].forEach(ev=> dropZone.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }));
+  dropZone.addEventListener('drop', (e)=>{ const files = Array.from(e.dataTransfer?.files||[]).filter(f=>f.type.startsWith('image/')); if(files.length) addFiles(files); });
+
+  document.getElementById('clear').addEventListener('click', ()=>{ state.items=[]; state.sel=-1; renderAll(); });
+  document.getElementById('downloadAll').addEventListener('click', downloadAllSlices);
+
+  function clampInt(v,min,max){ const n=parseInt(v||'0',10); return isNaN(n)?min:Math.min(max,Math.max(min,n)); }
+  function clampFloat(v,min,max){ const n=parseFloat(v||'0'); return isNaN(n)?min:Math.min(max,Math.max(min,n)); }
+
+  async function addFiles(files){
+    const list=[];
+    for (const file of files){
+      if (!file.type.startsWith('image/')) continue;
+      const url = URL.createObjectURL(file);
+      const dim = await readImageDim(url).catch(()=>({w:0,h:0}));
+      list.push({id:uid(), url, width:dim.w, height:dim.h, name:file.name});
+    }
+    state.items.push(...list); if (state.sel<0 && state.items.length) state.sel=0; renderAll();
+  }
+
+  function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+  function readImageDim(url){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res({w:i.naturalWidth,h:i.naturalHeight}); i.onerror=rej; i.src=url; }); }
+  function loadImage(url){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; }); }
+
+  function renderAll(){ renderThumbs(); renderViewer(); updateMeta(); }
+  function updateMeta(){ countChip.textContent = `${state.items.length} 张源图`; }
+
+  function renderThumbs(){
+    thumbs.innerHTML='';
+    state.items.forEach((it,idx)=>{
+      const d=document.createElement('div'); d.className='thumb'+(idx===state.sel?' active':''); d.title=it.name; d.addEventListener('click',()=>{ state.sel=idx; renderViewer(); renderThumbs(); });
+      const im=document.createElement('img'); im.src=it.url; d.appendChild(im);
+      const badge=document.createElement('div'); badge.className='badge'; const info = computeSlicesForItem(it); badge.textContent = `${it.width}×${it.height} · ${info.total}片`; d.appendChild(badge);
+      thumbs.appendChild(d);
+    });
+  }
+
+  function computeSlicesForItem(it){
+    const w=it.width,h=it.height; if(!w||!h) return {total:0,size:0,axis:'vertical',slices:[]};
+    const axis = state.cfg.dir==='auto' ? (h>=w?'vertical':'horizontal') : state.cfg.dir;
+    const autoSize = Math.min(w,h);
+    const size = state.cfg.mode==='custom' ? Math.min(state.cfg.size, autoSize) : autoSize;
+    const long = axis==='vertical'? h : w;
+    const ol = Math.min(Math.max(state.cfg.overlap,0), size-1);
+    const stride = Math.max(1, size - ol);
+    const slices=[];
+
+    if (long <= size){
+      // 只有一片；若长边小于方边，标记为 partial，导出时会填充
+      slices.push(axis==='vertical'? {sx:0,sy:0,size,partial: long < size} : {sx:0,sy:0,size,partial: long < size});
+    } else {
+      // 滑窗推进到越界前的最后一个完整方块
+      let pos = 0;
+      while (pos + size <= long){
+        slices.push(axis==='vertical'? {sx:0,sy:pos,size,partial:false} : {sx:pos,sy:0,size,partial:false});
+        pos += stride;
+      }
+      // 处理尾部：
+      if (state.cfg.tail){
+        const lastStart = long - size;
+        const last = slices[slices.length-1];
+        if (!last || (axis==='vertical'? last.sy : last.sx) !== lastStart){
+          // 替换或追加，确保尾端完全覆盖但不越界
+          if (last && (axis==='vertical'? last.sy : last.sx) > lastStart){
+            if (axis==='vertical') last.sy = lastStart; else last.sx = lastStart;
+          } else {
+            slices.push(axis==='vertical'? {sx:0,sy:lastStart,size,partial:false} : {sx:lastStart,sy:0,size,partial:false});
+          }
+        }
+      } else {
+        // 不尾对齐：若仍有剩余（不足 size），追加一片 partial，导出时用空白填充
+        if (pos < long){
+          slices.push(axis==='vertical'? {sx:0,sy:pos,size,partial:true} : {sx:pos,sy:0,size,partial:true});
+        }
+      }
+    }
+    return {total:slices.length,size,axis,slices};
+  }
+
+  function renderViewer(){
+    const ctx = viewer.getContext('2d');
+    const it = state.items[state.sel];
+    if(!it){ viewer.width=800; viewer.height=500; ctx.clearRect(0,0,viewer.width,viewer.height); vhDim.textContent=''; vhSlices.textContent=''; return; }
+    const img = new Image(); img.onload = ()=>{
+      // Fit to canvas width
+      const wrapW = viewer.parentElement.clientWidth; const ratio = img.naturalWidth/img.naturalHeight;
+      const drawW = Math.min(wrapW, img.naturalWidth); const drawH = Math.round(drawW/ratio);
+      const dpr = window.devicePixelRatio||1; viewer.width = Math.round(drawW*dpr); viewer.height = Math.round(drawH*dpr); viewer.style.width = drawW+'px'; viewer.style.height = drawH+'px';
+      ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr); ctx.clearRect(0,0,drawW,drawH); ctx.drawImage(img,0,0,drawW,drawH);
+      const info = computeSlicesForItem(it); vhDim.textContent = `${it.width}×${it.height}`; vhSlices.textContent = `${info.total} 片 · ${info.axis==='vertical'?'纵向':'横向'} · 方边 ${info.size}`;
+      // overlay
+      ctx.save(); ctx.lineWidth=2; ctx.strokeStyle='rgba(59,130,246,0.95)'; ctx.fillStyle='rgba(59,130,246,0.15)';
+      const scaleX = drawW / it.width; const scaleY = drawH / it.height;
+      info.slices.forEach(s=>{
+        const x = s.sx * scaleX; const y = s.sy * scaleY; const w = s.size * scaleX; const h = s.size * scaleY;
+        ctx.strokeRect(x,y,w,h); ctx.fillRect(x,y,w,h);
+        if (s.partial){ // 用虚线强调 partial
+          ctx.save(); ctx.setLineDash([6,4]); ctx.strokeStyle='rgba(239,68,68,0.9)'; ctx.strokeRect(x,y,w,h); ctx.restore();
+        }
+      });
+      ctx.restore();
+    }; img.src = it.url;
+  }
+
+  async function downloadAllSlices(){
+    if (!state.items.length) return alert('请先添加图片');
+    note.textContent = '正在生成切片…';
+    const entries = [];
+    for (const it of state.items){
+      const img = await loadImage(it.url);
+      const info = computeSlicesForItem(it);
+      const digits = String(info.total).length<3?3:String(info.total).length;
+      let idx=1;
+      for (const s of info.slices){
+        const cnv = document.createElement('canvas'); cnv.width=s.size; cnv.height=s.size; const c=cnv.getContext('2d');
+        // 先白底填充
+        c.fillStyle = '#fff'; c.fillRect(0,0,cnv.width,cnv.height);
+        if (info.axis==='vertical'){
+          const availH = Math.max(0, Math.min(s.size, img.naturalHeight - s.sy));
+          const srcH = s.partial ? availH : s.size;
+          const srcW = Math.min(s.size, img.naturalWidth); // 正常情况下等于 s.size
+          if (srcH > 0 && srcW > 0){
+            c.drawImage(img, s.sx, s.sy, srcW, srcH, 0, 0, srcW, srcH);
+          }
+        } else { // horizontal
+          const availW = Math.max(0, Math.min(s.size, img.naturalWidth - s.sx));
+          const srcW = s.partial ? availW : s.size;
+          const srcH = Math.min(s.size, img.naturalHeight);
+          if (srcH > 0 && srcW > 0){
+            c.drawImage(img, s.sx, s.sy, srcW, srcH, 0, 0, srcW, srcH);
+          }
+        }
+        let blob; if (state.cfg.fmt==='jpeg'){ blob = await new Promise(r=> cnv.toBlob(r,'image/jpeg', state.cfg.q)); }
+        else { blob = await new Promise(r=> cnv.toBlob(r,'image/png')); }
+        const base = (state.cfg.prefix||stripExt(it.name)||'image').replace(/[\\/:*?"<>|]/g,'_').trim()||'image';
+        const ext = state.cfg.fmt==='jpeg'?'jpg':'png';
+        const name = `${base}-${String(idx).padStart(digits,'0')}.${ext}`;
+        entries.push({name, blob}); idx++;
+      }
+    }
+    // Try File System Access API
+    if (window.showDirectoryPicker){
+      try{
+        const dir = await window.showDirectoryPicker({id:'square-crops'});
+        for (const fe of entries){ const fh = await dir.getFileHandle(fe.name,{create:true}); const w = await fh.createWritable(); await w.write(fe.blob); await w.close(); }
+        note.textContent = `已保存 ${entries.length} 个切片到所选文件夹。`;
+        return;
+      }catch(e){ /* fall through to zip */ }
+    }
+    // ZIP fallback
+    const zipBlob = await buildZipBlob(entries);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(zipBlob); a.download = `square-crops-${new Date().toISOString().replace(/[:T]/g,'-').slice(0,19)}.zip`; document.body.appendChild(a); a.click(); a.remove();
+    note.textContent = `已打包 ${entries.length} 个切片为 ZIP。`;
+  }
+
+  function stripExt(n){ return (n||'').replace(/\.[a-z0-9]+$/i,''); }
+
+  // ZIP (store-only)
+  async function buildZipBlob(fileEntries){
+    const encoder = new TextEncoder();
+    const cd = []; const chunks = []; let offset=0;
+    for (const fe of fileEntries){
+      const nameBytes = encoder.encode(fe.name);
+      const data = new Uint8Array(await fe.blob.arrayBuffer());
+      const crc = crc32(data);
+      const local = new Uint8Array(30 + nameBytes.length + data.length);
+      let p=0; write32(local,p,0x04034b50); p+=4; write16(local,p,20); p+=2; write16(local,p,0x0800); p+=2; write16(local,p,0); p+=2; write16(local,p,0); p+=2; write32(local,p,crc>>>0); p+=4; write32(local,p,data.length); p+=4; write32(local,p,data.length); p+=4; write16(local,p,nameBytes.length); p+=2; write16(local,p,0); p+=2; local.set(nameBytes,p); p+=nameBytes.length; local.set(data,p); p+=data.length; chunks.push(local);
+      const cdrec = new Uint8Array(46 + nameBytes.length); p=0; write32(cdrec,p,0x02014b50); p+=4; write16(cdrec,p,20); p+=2; write16(cdrec,p,20); p+=2; write16(cdrec,p,0x0800); p+=2; write16(cdrec,p,0); p+=2; write16(cdrec,p,0); p+=2; write32(cdrec,p,crc>>>0); p+=4; write32(cdrec,p,data.length); p+=4; write32(cdrec,p,data.length); p+=4; write16(cdrec,p,nameBytes.length); p+=2; write16(cdrec,p,0); p+=2; write16(cdrec,p,0); p+=2; write16(cdrec,p,0); p+=2; write16(cdrec,p,0); p+=2; write32(cdrec,p,0); p+=4; write32(cdrec,p,offset); p+=4; cdrec.set(nameBytes,p); p+=nameBytes.length; cd.push(cdrec);
+      offset += local.length;
+    }
+    const cdSize = cd.reduce((s,a)=>s+a.length,0); const cdStart=offset; const end=new Uint8Array(22); let q=0; write32(end,q,0x06054b50); q+=4; write16(end,q,0); q+=2; write16(end,q,0); q+=2; write16(end,q,fileEntries.length); q+=2; write16(end,q,fileEntries.length); q+=2; write32(end,q,cdSize); q+=4; write32(end,q,cdStart); q+=4; write16(end,q,0); q+=2; const all = concatU8([...chunks, ...cd, end]); return new Blob([all], {type:'application/zip'});
+  }
+  function write16(arr,pos,val){ arr[pos]=val & 255; arr[pos+1]=(val>>>8)&255; }
+  function write32(arr,pos,val){ arr[pos]=val & 255; arr[pos+1]=(val>>>8)&255; arr[pos+2]=(val>>>16)&255; arr[pos+3]=(val>>>24)&255; }
+  function concatU8(list){ const len=list.reduce((s,a)=>s+a.length,0); const out=new Uint8Array(len); let o=0; for(const a of list){ out.set(a,o); o+=a.length; } return out; }
+  const CRC_TABLE = (function(){ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++){ c=((c&1)?(0xEDB88320^(c>>>1)):(c>>>1)); } t[n]=c>>>0; } return t; })();
+  function crc32(u8){ let c=0 ^ (-1); for(let i=0;i<u8.length;i++) c=(c>>>8) ^ CRC_TABLE[(c ^ u8[i]) & 0xFF]; return (c ^ (-1)) >>> 0; }
+
+  // Initial
+  renderAll();
+})();
+</script>
+</body>
+</html>
