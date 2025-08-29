@@ -25,11 +25,21 @@
   <!-- 纹理着色工具 -->
   <url>
     <loc>https://cyang39.github.io/colorizer/</loc>
-    <lastmod>2025-08-26</lastmod>
+    <lastmod>2025-08-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/colorizer/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/colorizer/"/>
+  </url>
+  
+  <!-- 图片拼接工具 -->
+  <url>
+    <loc>https://cyang39.github.io/stitcher/</loc>
+    <lastmod>2025-08-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/stitcher/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/stitcher/"/>
   </url>
   
 </urlset>

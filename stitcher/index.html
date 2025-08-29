@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>纵向拼图工具（多图粘贴 + 解析 HTML 远程 URL）</title>
+  <style>
+    :root{--line:#dcdce1;--fg:#0e0f12;--muted:#6b6f76;--panel:#f7f7fa;--chip:#eef0f3;--accent:#3b82f6}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    #app{display:flex;height:100vh}
+    #left,#right{flex:1;min-width:0}
+    #left{border-right:1px solid var(--line);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:16px}
+    #right{display:flex;flex-direction:column;overflow:hidden}
+
+    #controls{padding:10px;border-bottom:1px solid var(--line);background:var(--panel)}
+    #controls .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    label{display:inline-flex;gap:6px;align-items:center}
+    input[type="number"]{width:100px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+    button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+    button.primary{background:#111;color:#fff;border-color:#111}
+
+    #dropZone{margin:10px;border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:#555}
+    #thumbs{display:flex;flex-wrap:wrap;gap:8px;padding:10px;overflow:auto}
+    .thumb{border:1px solid var(--line);border-radius:8px;position:relative;cursor:grab;background:#fff}
+    .thumb img{display:block;width:140px;height:96px;object-fit:cover;user-select:none;pointer-events:none}
+    .thumb .remove{position:absolute;top:4px;right:4px;background:#000;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer}
+    .thumb .tag{position:absolute;left:4px;top:4px;background:#0009;color:#fff;font-size:10px;border-radius:6px;padding:2px 6px}
+    .thumb.dragover{outline:2px solid var(--accent)}
+
+    #preview{width:100%;max-width:min(100%, 3000px)}
+    .spacer{height:8px}
+    .imgPreview{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);display:block;background:#000}
+    .placeholder{height:60vh;display:grid;place-items:center;border:1px dashed var(--line);border-radius:12px;color:#999}
+
+    .meta{color:var(--muted);font-size:12px}
+    .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:12px}
+    header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="left">
+      <div id="preview">
+        <div class="placeholder">
+          <div>
+            <div style="text-align:center">左侧实时预览</div>
+            <div class="meta" style="text-align:center">右侧粘贴/拖入图片，或粘贴/解析 HTML 里的多张图片 URL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="right">
+      <header>
+        <strong>纵向拼图工具（多图粘贴 + HTML URL 抓取）</strong>
+        <span class="chip" id="countChip">0 张</span>
+      </header>
+      <div id="controls">
+        <div class="row">
+          <label>最大宽度 <input type="number" id="maxWidth" value="1200" min="32" max="32767"></label>
+          <label>间距 <input type="number" id="spacing" value="0" min="0" max="200"></label>
+          <button class="primary" id="export">生成并下载</button>
+          <button id="clear">清空</button>
+          <label style="cursor:pointer">选择文件
+            <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+          </label>
+        </div>
+        <div class="meta" id="est">预估导出尺寸：0 × 0 px</div>
+        <div class="meta" id="corsNote" style="margin-top:6px;display:none"></div>
+      </div>
+
+      <div id="dropZone">
+        将图片拖入此处或直接在页面按 ⌘/Ctrl+V 粘贴（支持一次性多图；可从 HTML 中解析 <img src> 与 background-image 的 URL）
+        <div class="meta">若远程站点未设置 CORS，导出前我会尽力将图片转换为本地 Blob；若仍失败，导出可能被浏览器阻止。</div>
+      </div>
+
+      <div id="thumbs"></div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    const MAX_DIM = 32767;
+    /** items: { url, width, height, name?, source: 'file'|'dataurl'|'remote', cached:boolean } */
+    const items = [];
+
+    const thumbs = document.getElementById('thumbs');
+    const preview = document.getElementById('preview');
+    const dropZone = document.getElementById('dropZone');
+    const maxWidthEl = document.getElementById('maxWidth');
+    const spacingEl = document.getElementById('spacing');
+    const countChip = document.getElementById('countChip');
+    const est = document.getElementById('est');
+    const corsNote = document.getElementById('corsNote');
+
+    function updateMeta(){
+      countChip.textContent = items.length + ' 张';
+      const w = computeTargetWidth();
+      const h = estimateHeight();
+      est.textContent = `预估导出尺寸：${w||0} × ${h||0} px`;
+      const pending = items.filter(i=>i.source==='remote' && !i.cached).length;
+      corsNote.style.display = pending ? '' : 'none';
+      if (pending) corsNote.textContent = `提示：有 ${pending} 张远程图片尚未缓存为本地 Blob，导出前会自动尝试抓取（受 CORS 限制）。`;
+    }
+
+    function computeTargetWidth(){
+      if (!items.length) return 0;
+      const maxNatural = Math.max(...items.map(i=>i.width||0));
+      const cfgW = parseInt(maxWidthEl.value||'0',10) || maxNatural;
+      return Math.min(cfgW, maxNatural);
+    }
+
+    function estimateHeight(){
+      const w = computeTargetWidth();
+      if (!w || !items.length) return 0;
+      const spacing = parseInt(spacingEl.value||'0',10) || 0;
+      return items.reduce((sum,it,idx)=>{
+        const scale = it.width ? w / it.width : 1;
+        const h = it.height ? Math.round(it.height * scale) : 0;
+        return sum + h + (idx>0? spacing : 0);
+      }, 0);
+    }
+
+    function renderPreview(){
+      preview.innerHTML='';
+      if (!items.length){
+        const ph = document.createElement('div');
+        ph.className = 'placeholder';
+        ph.innerHTML = '<div><div style="text-align:center">左侧实时预览</div><div class="meta" style="text-align:center">右侧粘贴/拖入图片，或解析 HTML 链接</div></div>';
+        preview.appendChild(ph);
+        return;
+      }
+      const w = computeTargetWidth();
+      const spacing = parseInt(spacingEl.value||'0',10) || 0;
+      const wrap = document.createElement('div');
+      wrap.style.maxWidth = w ? w+'px' : '100%';
+      wrap.style.margin = '0 auto';
+
+      items.forEach((it,idx)=>{
+        if (idx>0 && spacing>0){
+          const sp = document.createElement('div'); sp.className='spacer'; sp.style.height = spacing+'px'; wrap.appendChild(sp);
+        }
+        const img = document.createElement('img');
+        img.src = it.url; img.alt = it.name || '';
+        img.className = 'imgPreview';
+        wrap.appendChild(img);
+      });
+      preview.appendChild(wrap);
+    }
+
+    function renderThumbs(){
+      thumbs.innerHTML='';
+      items.forEach((it,i)=>{
+        const div = document.createElement('div');
+        div.className='thumb'; div.draggable = true; div.dataset.index = i;
+        div.innerHTML = `<img src="${it.url}"><button class="remove" title="删除">×</button>`;
+        const tag = document.createElement('div');
+        tag.className = 'tag';
+        tag.textContent = it.source + (it.source==='remote' ? (it.cached?'·已缓存':'·远程') : '');
+        div.appendChild(tag);
+        div.querySelector('.remove').onclick = ()=>{ items.splice(i,1); renderAll(); };
+        div.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', i); });
+        div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('dragover'); });
+        div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+        div.addEventListener('drop', e=>{
+          e.preventDefault(); div.classList.remove('dragover');
+          const from = parseInt(e.dataTransfer.getData('text/plain'));
+          const to = i; if (Number.isNaN(from)) return;
+          const [m] = items.splice(from,1); items.splice(to,0,m); renderAll();
+        });
+        thumbs.appendChild(div);
+      });
+    }
+
+    async function addFiles(files){
+      const list = [];
+      for (const file of files){
+        if (!file || !file.type || !file.type.startsWith('image/')) continue;
+        const url = URL.createObjectURL(file);
+        const dim = await readImageDim(url).catch(()=>({w:0,h:0}));
+        list.push({url, width: dim.w, height: dim.h, name: file.name||'pasted-image', source:'file', cached:true});
+      }
+      items.push(...list); renderAll();
+    }
+
+    async function addDataUrls(dataUrls){
+      const list = [];
+      for (const src of dataUrls){
+        if (!/^data:image\//.test(src)) continue;
+        const dim = await readImageDim(src).catch(()=>({w:0,h:0}));
+        list.push({url: src, width: dim.w, height: dim.h, name: 'pasted-dataurl', source:'dataurl', cached:true});
+      }
+      items.push(...list); renderAll();
+    }
+
+    async function addRemoteUrls(urls){
+      const list = [];
+      for (let u of urls){
+        if (!/^https?:\/\//i.test(u)) continue;
+        // 去掉包裹的引号或 url("...") 残留
+        u = u.replace(/^url\((.*)\)$/i, '$1').replace(/^['"]|['"]$/g,'');
+        // 优先尝试 CORS 可抓取
+        try{
+          const blob = await fetchImageBlob(u);
+          if (blob){
+            const obj = URL.createObjectURL(blob);
+            const dim = await readImageDim(obj).catch(()=>({w:0,h:0}));
+            list.push({url: obj, width: dim.w, height: dim.h, name: fileNameFromUrl(u), source:'remote', cached:true});
+            continue;
+          }
+        }catch(e){ /* ignore */ }
+        // 回退：直接使用远程 URL（可能在导出时因 CORS 导致画布污染）
+        const dim2 = await readImageDimWithCross(u).catch(()=>({w:0,h:0}));
+        list.push({url: u, width: dim2.w, height: dim2.h, name: fileNameFromUrl(u), source:'remote', cached:false});
+      }
+      items.push(...list); renderAll();
+    }
+
+    function fileNameFromUrl(u){
+      try{ const p = new URL(u); return decodeURIComponent(p.pathname.split('/').pop()||'remote'); }catch{ return 'remote'; }
+    }
+
+    async function fetchImageBlob(u){
+      // 只有对方服务器允许 CORS 才能成功获取 blob
+      const res = await fetch(u, {mode:'cors', credentials:'omit'});
+      if (!res.ok) throw new Error('Network '+res.status);
+      // 某些站点返回 text/html 防盗链，这里简单校验类型
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.startsWith('image/')) throw new Error('Not image content-type');
+      return await res.blob();
+    }
+
+    function readImageDim(url){
+      return new Promise((resolve,reject)=>{
+        const img = new Image();
+        img.onload = ()=> resolve({w: img.naturalWidth, h: img.naturalHeight});
+        img.onerror = reject; img.src = url;
+      });
+    }
+
+    function readImageDimWithCross(url){
+      return new Promise((resolve,reject)=>{
+        const img = new Image();
+        img.crossOrigin = 'anonymous'; // 若 CORS 允许，可避免 taint
+        img.onload = ()=> resolve({w: img.naturalWidth, h: img.naturalHeight});
+        img.onerror = reject; img.src = url;
+      });
+    }
+
+    function loadImage(src, useCross=false){
+      return new Promise((res,rej)=>{ const img=new Image(); if(useCross) img.crossOrigin='anonymous'; img.onload=()=>res(img); img.onerror=rej; img.src=src; });
+    }
+
+    // —— 导出 ——
+    document.getElementById('export').onclick = async ()=>{
+      if (!items.length) return alert('请先添加图片');
+      // 尝试把还未缓存的远程图片抓取为 Blob
+      const pending = items.filter(i=>i.source==='remote' && !i.cached);
+      if (pending.length){
+        for (const it of pending){
+          try{
+            const blob = await fetchImageBlob(it.url);
+            if (blob){
+              const obj = URL.createObjectURL(blob);
+              const dim = await readImageDim(obj).catch(()=>({w:it.width,h:it.height}));
+              it.url = obj; it.width = dim.w; it.height = dim.h; it.cached = true;
+            }
+          }catch(e){ /* 仍不可抓取，保持外链 */ }
+        }
+      }
+      const still = items.filter(i=>i.source==='remote' && !i.cached);
+      if (still.length){
+        const ok = confirm(`有 ${still.length} 张远程图片未能缓存（可能未启用 CORS）。继续导出可能因画布被跨域污染而失败，是否继续？`);
+        if (!ok) return;
+      }
+
+      const width = computeTargetWidth();
+      const height = estimateHeight();
+      if (!width || !height) return alert('图片尚未解析完成或宽高为 0');
+      if (width>MAX_DIM || height>MAX_DIM) return alert(`导出尺寸超过浏览器限制：${width}×${height}`);
+
+      const spacing = parseInt(spacingEl.value||'0',10) || 0;
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,width,height);
+
+      let y = 0;
+      for (let i=0;i<items.length;i++){
+        const it = items[i]; if (i>0) y += spacing;
+        const img = await loadImage(it.url, it.source==='remote');
+        const scale = it.width ? width/it.width : (width / img.naturalWidth);
+        const drawW = Math.round((it.width || img.naturalWidth) * scale);
+        const drawH = Math.round((it.height || img.naturalHeight) * scale);
+        ctx.drawImage(img, 0, y, drawW, drawH);
+        y += drawH;
+      }
+
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png'); a.download = `stitched-${Date.now()}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+    };
+
+    // —— 清空 ——
+    document.getElementById('clear').onclick = ()=>{ items.length = 0; renderAll(); };
+
+    // —— 文件选择 ——
+    document.getElementById('fileInput').addEventListener('change', e=> addFiles(Array.from(e.target.files||[])) );
+
+    // —— 拖拽导入 ——
+    ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+      dropZone.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); });
+    });
+    dropZone.addEventListener('drop', (e)=>{
+      const files = Array.from(e.dataTransfer?.files||[]).filter(f=>f.type.startsWith('image/'));
+      if (files.length) addFiles(files);
+    });
+
+    // —— 多图粘贴 + 解析 HTML ——
+    window.addEventListener('paste', async (e)=>{
+      const dt = e.clipboardData;
+      const fileList = [];
+      // a) files 列表
+      for (const f of dt.files || []){
+        if (f && f.type && f.type.startsWith('image/')) fileList.push(f);
+      }
+      // b) items 列表（更通用）
+      for (const it of dt.items || []){
+        if (it.kind === 'file' && it.type && it.type.startsWith('image/')){
+          const f = it.getAsFile(); if (f) fileList.push(f);
+        }
+      }
+      // c) 解析 HTML 中的 <img src> 和 style 背景图
+      const html = dt.getData('text/html');
+      const dataUrls = [];
+      const remoteUrls = [];
+      if (html){
+        try{
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          doc.querySelectorAll('img').forEach(img => {
+            const src = (img.getAttribute('src')||'').trim();
+            if (!src) return;
+            if (src.startsWith('data:image/')) dataUrls.push(src);
+            else if (/^https?:\/\//i.test(src)) remoteUrls.push(src);
+          });
+          doc.querySelectorAll('[style]').forEach(el=>{
+            const st = el.getAttribute('style')||'';
+            const m = st.match(/background-image\s*:\s*url\(([^)]+)\)/i);
+            if (m){
+              let u = m[1].trim().replace(/^["']|["']$/g,'');
+              if (u.startsWith('data:image/')) dataUrls.push(u);
+              else if (/^https?:\/\//i.test(u)) remoteUrls.push(u);
+            }
+          });
+        }catch{ /* ignore */ }
+      }
+
+      if (fileList.length || dataUrls.length || remoteUrls.length){
+        e.preventDefault();
+        if (fileList.length) await addFiles(fileList);
+        if (dataUrls.length) await addDataUrls(dataUrls);
+        if (remoteUrls.length) await addRemoteUrls(remoteUrls);
+      }
+    });
+
+    function renderAll(){ renderPreview(); renderThumbs(); updateMeta(); }
+    maxWidthEl.addEventListener('input', ()=> renderAll());
+    spacingEl.addEventListener('input', ()=> renderAll());
+    renderAll();
+  })();
+  </script>
+</body>
+</html>

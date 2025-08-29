@@ -7,8 +7,8 @@
     content="width=device-width, initial-scale=1, viewport-fit=cover"
   />
   <title>Cyang39 · Tools & Projects</title>
-  <meta name="description" content="Cyang39 的色彩和图像工具集。试试图像色彩提取器和纹理着色工具，完全在浏览器中运行。" />
-  <meta name="keywords" content="Cyang39, 工具, 项目, 色彩, 调色板, 主色调, 图像色彩提取器, 纹理着色, GitHub Pages" />
+  <meta name="description" content="Cyang39 的色彩和图像工具集。试试图像色彩提取器、纹理着色工具和图片拼接工具，完全在浏览器中运行。" />
+  <meta name="keywords" content="Cyang39, 工具, 项目, 色彩, 调色板, 主色调, 图像色彩提取器, 纹理着色, 图片拼接, 拼图工具, GitHub Pages" />
 
   <!-- Canonical -->
   <link rel="canonical" href="https://cyang39.github.io/" />
@@ -18,14 +18,14 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cyang39" />
   <meta property="og:title" content="Cyang39 · Tools & Projects" />
-  <meta property="og:description" content="试试图像色彩提取器和纹理着色工具 — 完全在浏览器中运行的色彩分析和纹理处理工具。" />
+  <meta property="og:description" content="试试图像色彩提取器、纹理着色工具和图片拼接工具 — 完全在浏览器中运行的色彩分析、纹理处理和图片拼接工具。" />
   <meta property="og:url" content="https://cyang39.github.io/" />
   <meta property="og:image" content="https://cyang39.github.io/palette/og-palette.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Cyang39 · Tools & Projects" />
-  <meta name="twitter:description" content="试试图像色彩提取器和纹理着色工具 — 完全在浏览器中运行的色彩分析和纹理处理工具。" />
+  <meta name="twitter:description" content="试试图像色彩提取器、纹理着色工具和图片拼接工具 — 完全在浏览器中运行的色彩分析、纹理处理和图片拼接工具。" />
   <meta name="twitter:image" content="https://cyang39.github.io/palette/og-palette.png" />
 
   <!-- Simple favicon (optional) -->
@@ -58,7 +58,7 @@
     "name": "Cyang39 实用工具集",
     "alternateName": "Cyang39 Tools",
     "url": "https://cyang39.github.io/",
-    "description": "Cyang39 的色彩和图像工具集。试试图像色彩提取器和纹理着色工具，完全在浏览器中运行。",
+    "description": "Cyang39 的色彩和图像工具集。试试图像色彩提取器、纹理着色工具和图片拼接工具，完全在浏览器中运行。",
     "author": {
       "@type": "Person",
       "name": "Cyang39",
@@ -88,6 +88,14 @@
         "name": "纹理着色工具",
         "description": "为灰白纹理图快速着色，支持多种混合模式，网格预览效果，点击即可导出高质量 PNG。",
         "url": "https://cyang39.github.io/colorizer/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Web Browser"
+      },
+      {
+        "@type": "WebApplication",
+        "name": "图片拼接工具",
+        "description": "纵向拼图工具，支持多图粘贴、HTML URL 解析，可调节间距和最大宽度，一键生成纵向拼合图片。",
+        "url": "https://cyang39.github.io/stitcher/",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "Web Browser"
       }
@@ -213,6 +221,7 @@
           <li><a href="/" aria-current="page">主页</a></li>
           <li><a href="/palette/">色彩提取</a></li>
           <li><a href="/colorizer/">纹理着色</a></li>
+          <li><a href="/stitcher/">图片拼接</a></li>
           <li><a href="https://github.com/cyang39" target="_blank" rel="noopener">关于</a></li>
         </ul>
       </nav>
@@ -256,6 +265,18 @@
         </div>
         <div class="actions">
           <a class="btn primary" href="/colorizer/">打开应用</a>
+          <a class="btn" href="https://github.com/cyang39" target="_blank" rel="noopener">源码</a>
+        </div>
+      </div>
+      
+      <div class="card" aria-label="图片拼接工具">
+        <div class="thumb" style="background: linear-gradient(135deg, #667eea, #764ba2, #f093fb); display: grid; place-items: center; color: white; font-weight: 700; font-size: 18px;">🧩 Stitcher</div>
+        <div class="body">
+          <h3>图片拼接工具</h3>
+          <p>纵向拼图工具，支持多图粘贴、HTML URL 解析，可调节间距和最大宽度，一键生成纵向拼合图片。</p>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="/stitcher/">打开应用</a>
           <a class="btn" href="https://github.com/cyang39" target="_blank" rel="noopener">源码</a>
         </div>
       </div>
