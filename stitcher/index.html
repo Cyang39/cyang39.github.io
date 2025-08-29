@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>纵向拼图工具（多图粘贴 + 解析 HTML 远程 URL）</title>
+  <title>纵向拼图工具（多图粘贴 + 远程URL + 批量下载源图 + 文件名规则）</title>
   <style>
     :root{--line:#dcdce1;--fg:#0e0f12;--muted:#6b6f76;--panel:#f7f7fa;--chip:#eef0f3;--accent:#3b82f6}
     *{box-sizing:border-box}
@@ -17,7 +17,8 @@
     #controls{padding:10px;border-bottom:1px solid var(--line);background:var(--panel)}
     #controls .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
     label{display:inline-flex;gap:6px;align-items:center}
-    input[type="number"]{width:100px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+    input[type="number"], select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+    input[type="number"]{width:110px}
     button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
     button.primary{background:#111;color:#fff;border-color:#111}
 
@@ -54,14 +55,21 @@
 
     <div id="right">
       <header>
-        <strong>纵向拼图工具（多图粘贴 + HTML URL 抓取）</strong>
+        <strong>纵向拼图工具（多图粘贴 + HTML URL + 批量下载源图 + 文件名规则）</strong>
         <span class="chip" id="countChip">0 张</span>
       </header>
       <div id="controls">
         <div class="row">
           <label>最大宽度 <input type="number" id="maxWidth" value="1200" min="32" max="32767"></label>
           <label>间距 <input type="number" id="spacing" value="0" min="0" max="200"></label>
-          <button class="primary" id="export">生成并下载</button>
+          <label>文件名规则
+            <select id="nameRule">
+              <option value="clean" selected>原始名清洗</option>
+              <option value="number">按顺序自动编号</option>
+            </select>
+          </label>
+          <button class="primary" id="export">导出拼接图</button>
+          <button id="downloadAll">下载源图</button>
           <button id="clear">清空</button>
           <label style="cursor:pointer">选择文件
             <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
@@ -73,7 +81,7 @@
 
       <div id="dropZone">
         将图片拖入此处或直接在页面按 ⌘/Ctrl+V 粘贴（支持一次性多图；可从 HTML 中解析 <img src> 与 background-image 的 URL）
-        <div class="meta">若远程站点未设置 CORS，导出前我会尽力将图片转换为本地 Blob；若仍失败，导出可能被浏览器阻止。</div>
+        <div class="meta">若远程站点未设置 CORS，将尽力抓取为 Blob；失败的会在下载 ZIP 的 README 中列出。</div>
       </div>
 
       <div id="thumbs"></div>
@@ -83,7 +91,7 @@
   <script>
   (function(){
     const MAX_DIM = 32767;
-    /** items: { url, width, height, name?, source: 'file'|'dataurl'|'remote', cached:boolean } */
+    /** items: { url, width?, height?, name?, source: 'file'|'dataurl'|'remote', cached:boolean, _original?:string } */
     const items = [];
 
     const thumbs = document.getElementById('thumbs');
@@ -91,6 +99,7 @@
     const dropZone = document.getElementById('dropZone');
     const maxWidthEl = document.getElementById('maxWidth');
     const spacingEl = document.getElementById('spacing');
+    const nameRuleEl = document.getElementById('nameRule');
     const countChip = document.getElementById('countChip');
     const est = document.getElementById('est');
     const corsNote = document.getElementById('corsNote');
@@ -102,14 +111,14 @@
       est.textContent = `预估导出尺寸：${w||0} × ${h||0} px`;
       const pending = items.filter(i=>i.source==='remote' && !i.cached).length;
       corsNote.style.display = pending ? '' : 'none';
-      if (pending) corsNote.textContent = `提示：有 ${pending} 张远程图片尚未缓存为本地 Blob，导出前会自动尝试抓取（受 CORS 限制）。`;
+      if (pending) corsNote.textContent = `提示：有 ${pending} 张远程图片尚未缓存为本地 Blob，导出/下载 ZIP 前会自动尝试抓取（受 CORS 限制）。`;
     }
 
     function computeTargetWidth(){
       if (!items.length) return 0;
       const maxNatural = Math.max(...items.map(i=>i.width||0));
       const cfgW = parseInt(maxWidthEl.value||'0',10) || maxNatural;
-      return Math.min(cfgW, maxNatural);
+      return Math.min(cfgW, maxNatural || cfgW);
     }
 
     function estimateHeight(){
@@ -190,7 +199,8 @@
       for (const src of dataUrls){
         if (!/^data:image\//.test(src)) continue;
         const dim = await readImageDim(src).catch(()=>({w:0,h:0}));
-        list.push({url: src, width: dim.w, height: dim.h, name: 'pasted-dataurl', source:'dataurl', cached:true});
+        const ext = (src.split(';')[0].split('/')[1]||'png').split('+')[0];
+        list.push({url: src, width: dim.w, height: dim.h, name: `pasted-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`, source:'dataurl', cached:true});
       }
       items.push(...list); renderAll();
     }
@@ -199,34 +209,29 @@
       const list = [];
       for (let u of urls){
         if (!/^https?:\/\//i.test(u)) continue;
-        // 去掉包裹的引号或 url("...") 残留
         u = u.replace(/^url\((.*)\)$/i, '$1').replace(/^['"]|['"]$/g,'');
-        // 优先尝试 CORS 可抓取
         try{
           const blob = await fetchImageBlob(u);
           if (blob){
             const obj = URL.createObjectURL(blob);
             const dim = await readImageDim(obj).catch(()=>({w:0,h:0}));
-            list.push({url: obj, width: dim.w, height: dim.h, name: fileNameFromUrl(u), source:'remote', cached:true});
+            list.push({url: obj, width: dim.w, height: dim.h, name: fileNameFromUrl(u), source:'remote', cached:true, _original:u});
             continue;
           }
         }catch(e){ /* ignore */ }
-        // 回退：直接使用远程 URL（可能在导出时因 CORS 导致画布污染）
         const dim2 = await readImageDimWithCross(u).catch(()=>({w:0,h:0}));
-        list.push({url: u, width: dim2.w, height: dim2.h, name: fileNameFromUrl(u), source:'remote', cached:false});
+        list.push({url: u, width: dim2.w, height: dim2.h, name: fileNameFromUrl(u), source:'remote', cached:false, _original:u});
       }
       items.push(...list); renderAll();
     }
 
     function fileNameFromUrl(u){
-      try{ const p = new URL(u); return decodeURIComponent(p.pathname.split('/').pop()||'remote'); }catch{ return 'remote'; }
+      try{ const p = new URL(u); const n = decodeURIComponent(p.pathname.split('/').pop()||'remote'); return n || 'remote'; }catch{ return 'remote'; }
     }
 
     async function fetchImageBlob(u){
-      // 只有对方服务器允许 CORS 才能成功获取 blob
       const res = await fetch(u, {mode:'cors', credentials:'omit'});
       if (!res.ok) throw new Error('Network '+res.status);
-      // 某些站点返回 text/html 防盗链，这里简单校验类型
       const ct = res.headers.get('content-type') || '';
       if (!ct.startsWith('image/')) throw new Error('Not image content-type');
       return await res.blob();
@@ -243,7 +248,7 @@
     function readImageDimWithCross(url){
       return new Promise((resolve,reject)=>{
         const img = new Image();
-        img.crossOrigin = 'anonymous'; // 若 CORS 允许，可避免 taint
+        img.crossOrigin = 'anonymous';
         img.onload = ()=> resolve({w: img.naturalWidth, h: img.naturalHeight});
         img.onerror = reject; img.src = url;
       });
@@ -253,29 +258,9 @@
       return new Promise((res,rej)=>{ const img=new Image(); if(useCross) img.crossOrigin='anonymous'; img.onload=()=>res(img); img.onerror=rej; img.src=src; });
     }
 
-    // —— 导出 ——
+    // —— 导出拼接图 ——
     document.getElementById('export').onclick = async ()=>{
       if (!items.length) return alert('请先添加图片');
-      // 尝试把还未缓存的远程图片抓取为 Blob
-      const pending = items.filter(i=>i.source==='remote' && !i.cached);
-      if (pending.length){
-        for (const it of pending){
-          try{
-            const blob = await fetchImageBlob(it.url);
-            if (blob){
-              const obj = URL.createObjectURL(blob);
-              const dim = await readImageDim(obj).catch(()=>({w:it.width,h:it.height}));
-              it.url = obj; it.width = dim.w; it.height = dim.h; it.cached = true;
-            }
-          }catch(e){ /* 仍不可抓取，保持外链 */ }
-        }
-      }
-      const still = items.filter(i=>i.source==='remote' && !i.cached);
-      if (still.length){
-        const ok = confirm(`有 ${still.length} 张远程图片未能缓存（可能未启用 CORS）。继续导出可能因画布被跨域污染而失败，是否继续？`);
-        if (!ok) return;
-      }
-
       const width = computeTargetWidth();
       const height = estimateHeight();
       if (!width || !height) return alert('图片尚未解析完成或宽高为 0');
@@ -303,6 +288,125 @@
       document.body.appendChild(a); a.click(); a.remove();
     };
 
+    // —— 批量下载源图（应用文件名规则） ——
+    document.getElementById('downloadAll').onclick = async ()=>{
+      if (!items.length) return alert('没有可下载的图片');
+
+      // 优先使用文件系统访问 API（Chrome 等），可直接保存到文件夹
+      if (window.showDirectoryPicker){
+        try{
+          const dir = await window.showDirectoryPicker({id:'stitch-images'});
+          const results = await collectBlobsForAll();
+          for (const f of results.files){
+            const fileHandle = await dir.getFileHandle(f.name, {create:true});
+            const writable = await fileHandle.createWritable();
+            await writable.write(f.blob); await writable.close();
+          }
+          if (results.failures.length){
+            const fh = await dir.getFileHandle('README.txt', {create:true});
+            const w = await fh.createWritable();
+            await w.write(resultsReadme(results.failures)); await w.close();
+            alert(`已保存 ${results.files.length} 个文件；${results.failures.length} 个远程图片因 CORS 无法获取，详情见 README.txt`);
+          } else {
+            alert(`已保存 ${results.files.length} 个文件`);
+          }
+          return;
+        }catch(err){ /* 用户取消或不支持，回退到 ZIP */ }
+      }
+
+      // 回退为 ZIP 下载
+      const results = await collectBlobsForAll();
+      const zipBlob = await buildZipBlob(results.files, results.failures);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = `sources-${new Date().toISOString().replace(/[:T]/g,'-').slice(0,19)}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      if (results.failures.length){
+        alert(`已打包 ${results.files.length} 个文件；${results.failures.length} 个远程图片因 CORS 无法获取，已在 ZIP 的 README.txt 中列出。`);
+      }
+    };
+
+    async function collectBlobsForAll(){
+      const files = []; const failures = []; const used = new Set();
+      let idx = 1;
+      for (const it of items){
+        try{
+          const {blob, ext} = await getBlobForItem(it);
+          const name = buildFileName(it, idx, ext, used);
+          files.push({name, blob});
+          idx++;
+        }catch(e){
+          failures.push({name: it.name || `image-${idx}`, url: it._original || it.url, reason: String(e && e.message || e)});
+          idx++;
+        }
+      }
+      return {files, failures};
+    }
+
+    function buildFileName(it, index, extFromBlob, used){
+      const rule = nameRuleEl.value; // 'clean' | 'number'
+      let base = '';
+      let ext = normalizeExt(extFromBlob || extFromName(it.name) || extFromPath(it._original||it.url) || 'png');
+      if (rule === 'number'){
+        base = `image-${String(index).padStart(3,'0')}`;
+      } else {
+        base = (stripExt(sanitizeName(it.name || 'image'))) || `image-${String(index).padStart(3,'0')}`;
+      }
+      let candidate = `${base}.${ext}`;
+      let counter = 1;
+      while (used.has(candidate)){
+        candidate = `${base}(${counter++}).${ext}`;
+      }
+      used.add(candidate);
+      return candidate;
+    }
+
+    async function getBlobForItem(it){
+      const url = it.url;
+      if (url.startsWith('blob:')){
+        const b = await (await fetch(url)).blob();
+        return {blob: b, ext: guessExtFromType(b.type) || 'png'};
+      }
+      if (url.startsWith('data:')){
+        const b = dataUrlToBlob(url); return {blob: b, ext: guessExtFromType(b.type) || 'png'};
+      }
+      if (/^https?:\/\//i.test(url)){
+        const res = await fetch(url, {mode:'cors', credentials:'omit'});
+        if (!res.ok) throw new Error('网络错误 '+res.status);
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.startsWith('image/')) throw new Error('非图片类型: '+ct);
+        const b = await res.blob();
+        return {blob: b, ext: guessExtFromType(b.type) || extFromPath(url) || 'png'};
+      }
+      const b = await (await fetch(url)).blob();
+      return {blob: b, ext: guessExtFromType(b.type) || 'png'};
+    }
+
+    function extFromName(name){ const m = (name||'').match(/\.([a-z0-9]+)$/i); return m?normalizeExt(m[1]):''; }
+    function extFromPath(u){ try{ const p=new URL(u).pathname; const m=p.match(/\.([a-z0-9]+)$/i); return m?normalizeExt(m[1]):''; }catch{return ''} }
+    function guessExtFromType(t){ const m=t.match(/^image\/(.+)$/); return m?normalizeExt(m[1]):''; }
+    function normalizeExt(e){ return (e||'').toLowerCase().replace('jpeg','jpg'); }
+    function stripExt(n){ return (n||'').replace(/\.[a-z0-9]+$/i,''); }
+    function sanitizeName(n){ return (n||'').replace(/[\\/:*?"<>|]/g,'_').trim() || 'image'; }
+
+    function dataUrlToBlob(dataUrl){
+      const [hdr, b64] = dataUrl.split(',');
+      const mime = hdr.match(/data:([^;]+)/)[1];
+      const bin = atob(b64);
+      const len = bin.length; const u8 = new Uint8Array(len);
+      for (let i=0;i<len;i++) u8[i] = bin.charCodeAt(i);
+      return new Blob([u8], {type:mime});
+    }
+
+    function resultsReadme(failures){
+      let txt = 'Some images could not be fetched due to CORS or non-image responses.\n';
+      txt += '这些图片未被打包，请手动下载：\n\n';
+      failures.forEach((f,i)=>{
+        txt += `${i+1}. name: ${f.name}\n   url: ${f.url}\n   reason: ${f.reason}\n\n`;
+      });
+      return new Blob([new TextEncoder().encode(txt)], {type:'text/plain'});
+    }
+
     // —— 清空 ——
     document.getElementById('clear').onclick = ()=>{ items.length = 0; renderAll(); };
 
@@ -322,41 +426,24 @@
     window.addEventListener('paste', async (e)=>{
       const dt = e.clipboardData;
       const fileList = [];
-      // a) files 列表
-      for (const f of dt.files || []){
-        if (f && f.type && f.type.startsWith('image/')) fileList.push(f);
-      }
-      // b) items 列表（更通用）
-      for (const it of dt.items || []){
-        if (it.kind === 'file' && it.type && it.type.startsWith('image/')){
-          const f = it.getAsFile(); if (f) fileList.push(f);
-        }
-      }
-      // c) 解析 HTML 中的 <img src> 和 style 背景图
+      for (const f of dt.files || []){ if (f && f.type && f.type.startsWith('image/')) fileList.push(f); }
+      for (const it of dt.items || []){ if (it.kind==='file' && it.type && it.type.startsWith('image/')){ const f=it.getAsFile(); if (f) fileList.push(f); } }
       const html = dt.getData('text/html');
-      const dataUrls = [];
-      const remoteUrls = [];
+      const dataUrls = []; const remoteUrls = [];
       if (html){
         try{
           const doc = new DOMParser().parseFromString(html, 'text/html');
           doc.querySelectorAll('img').forEach(img => {
-            const src = (img.getAttribute('src')||'').trim();
-            if (!src) return;
-            if (src.startsWith('data:image/')) dataUrls.push(src);
-            else if (/^https?:\/\//i.test(src)) remoteUrls.push(src);
+            const src = (img.getAttribute('src')||'').trim(); if (!src) return;
+            if (src.startsWith('data:image/')) dataUrls.push(src); else if (/^https?:\/\//i.test(src)) remoteUrls.push(src);
           });
           doc.querySelectorAll('[style]').forEach(el=>{
             const st = el.getAttribute('style')||'';
             const m = st.match(/background-image\s*:\s*url\(([^)]+)\)/i);
-            if (m){
-              let u = m[1].trim().replace(/^["']|["']$/g,'');
-              if (u.startsWith('data:image/')) dataUrls.push(u);
-              else if (/^https?:\/\//i.test(u)) remoteUrls.push(u);
-            }
+            if (m){ let u = m[1].trim().replace(/^["']|["']$/g,''); if (u.startsWith('data:image/')) dataUrls.push(u); else if (/^https?:\/\//i.test(u)) remoteUrls.push(u); }
           });
         }catch{ /* ignore */ }
       }
-
       if (fileList.length || dataUrls.length || remoteUrls.length){
         e.preventDefault();
         if (fileList.length) await addFiles(fileList);
@@ -365,6 +452,127 @@
       }
     });
 
+    // —— 渲染 ——
+    function renderAll(){ renderPreview(); renderThumbs(); updateMeta(); }
+    maxWidthEl.addEventListener('input', ()=> renderAll());
+    spacingEl.addEventListener('input', ()=> renderAll());
+    nameRuleEl.addEventListener('change', ()=> {/* no-op: applied on download */});
+    renderAll();
+
+    // —— ZIP（无压缩）构建 ——
+    async function buildZipBlob(fileEntries, failures){
+      // fileEntries: [{name, blob}]
+      const encoder = new TextEncoder();
+      const cd = []; // central directory records
+      const chunks = []; // local headers + data
+      let offset = 0;
+
+      for (const fe of fileEntries){
+        const nameBytes = encoder.encode(fe.name);
+        const data = new Uint8Array(await fe.blob.arrayBuffer());
+        const crc = crc32(data);
+        const local = new Uint8Array(30 + nameBytes.length + data.length);
+        let p = 0;
+        write32(local, p, 0x04034b50); p+=4;           // local file header signature
+        write16(local, p, 20); p+=2;                    // version needed to extract
+        write16(local, p, 0x0800); p+=2;                // general purpose bit flag (UTF-8)
+        write16(local, p, 0); p+=2;                     // compression method (0 = store)
+        write16(local, p, 0); p+=2;                     // last mod file time
+        write16(local, p, 0); p+=2;                     // last mod file date
+        write32(local, p, crc>>>0); p+=4;               // CRC-32
+        write32(local, p, data.length); p+=4;           // compressed size
+        write32(local, p, data.length); p+=4;           // uncompressed size
+        write16(local, p, nameBytes.length); p+=2;      // file name length
+        write16(local, p, 0); p+=2;                     // extra field length
+        local.set(nameBytes, p); p+=nameBytes.length;   // file name
+        local.set(data, p); p+=data.length;             // file data
+        chunks.push(local);
+
+        // central directory header
+        const cdrec = new Uint8Array(46 + nameBytes.length);
+        p = 0;
+        write32(cdrec, p, 0x02014b50); p+=4;            // central file header signature
+        write16(cdrec, p, 20); p+=2;                    // version made by
+        write16(cdrec, p, 20); p+=2;                    // version needed
+        write16(cdrec, p, 0x0800); p+=2;                // general purpose bit flag (UTF-8)
+        write16(cdrec, p, 0); p+=2;                     // method
+        write16(cdrec, p, 0); p+=2;                     // time
+        write16(cdrec, p, 0); p+=2;                     // date
+        write32(cdrec, p, crc>>>0); p+=4;               // CRC-32
+        write32(cdrec, p, data.length); p+=4;           // comp size
+        write32(cdrec, p, data.length); p+=4;           // uncomp size
+        write16(cdrec, p, nameBytes.length); p+=2;      // name len
+        write16(cdrec, p, 0); p+=2;                     // extra len
+        write16(cdrec, p, 0); p+=2;                     // comment len
+        write16(cdrec, p, 0); p+=2;                     // disk number start
+        write16(cdrec, p, 0); p+=2;                     // internal attrs
+        write32(cdrec, p, 0); p+=4;                     // external attrs
+        write32(cdrec, p, offset); p+=4;                // relative offset of local header
+        cdrec.set(nameBytes, p); p+=nameBytes.length;
+        cd.push(cdrec);
+
+        offset += local.length;
+      }
+
+      // Optional README for failures
+      if (failures && failures.length){
+        const txt = resultsReadme(failures);
+        const ab = new Uint8Array(await txt.arrayBuffer());
+        const nameBytes = encoder.encode('README.txt');
+        const crc = crc32(ab);
+        const local = new Uint8Array(30 + nameBytes.length + ab.length);
+        let p = 0;
+        write32(local, p, 0x04034b50); p+=4; write16(local, p, 20); p+=2; write16(local, p, 0x0800); p+=2;
+        write16(local, p, 0); p+=2; write16(local, p, 0); p+=2;
+        write32(local, p, crc>>>0); p+=4; write32(local, p, ab.length); p+=4; write32(local, p, ab.length); p+=4;
+        write16(local, p, nameBytes.length); p+=2; write16(local, p, 0); p+=2;
+        local.set(nameBytes, p); p+=nameBytes.length; local.set(ab, p); p+=ab.length;
+        chunks.push(local);
+        const cdrec = new Uint8Array(46 + nameBytes.length);
+        p = 0; write32(cdrec, p, 0x02014b50); p+=4; write16(cdrec, p, 20); p+=2; write16(cdrec, p, 20); p+=2; write16(cdrec, p, 0x0800); p+=2;
+        write16(cdrec, p, 0); p+=2; write16(cdrec, p, 0); p+=2; write32(cdrec, p, crc>>>0); p+=4; write32(cdrec, p, ab.length); p+=4; write32(cdrec, p, ab.length); p+=4;
+        write16(cdrec, p, nameBytes.length); p+=2; write16(cdrec, p, 0); p+=2; write16(cdrec, p, 0); p+=2; write16(cdrec, p, 0); p+=2; write16(cdrec, p, 0); p+=2;
+        write32(cdrec, p, 0); p+=4; write32(cdrec, p, offset); p+=4; cdrec.set(nameBytes, p); p+=nameBytes.length; cd.push(cdrec);
+        offset += local.length;
+      }
+
+      const cdSize = cd.reduce((s,a)=>s+a.length,0);
+      const cdStart = offset;
+      const end = new Uint8Array(22);
+      let q = 0; write32(end, q, 0x06054b50); q+=4; // End of central directory
+      write16(end, q, 0); q+=2; // number of this disk
+      write16(end, q, 0); q+=2; // disk with start of central directory
+      const totalFiles = fileEntries.length + (failures && failures.length?1:0);
+      write16(end, q, totalFiles); q+=2; // total entries on this disk
+      write16(end, q, totalFiles); q+=2; // total entries
+      write32(end, q, cdSize); q+=4;    // size of central directory
+      write32(end, q, cdStart); q+=4;   // offset of start of central directory
+      write16(end, q, 0); q+=2;         // .ZIP file comment length
+
+      const all = concatU8([...chunks, ...cd, end]);
+      return new Blob([all], {type:'application/zip'});
+    }
+
+    function write16(arr, pos, val){ arr[pos] = val & 255; arr[pos+1] = (val>>>8) & 255; }
+    function write32(arr, pos, val){ arr[pos] = val & 255; arr[pos+1] = (val>>>8)&255; arr[pos+2] = (val>>>16)&255; arr[pos+3] = (val>>>24)&255; }
+    function concatU8(list){ const len = list.reduce((s,a)=>s+a.length,0); const out = new Uint8Array(len); let o=0; for(const a of list){ out.set(a,o); o+=a.length;} return out; }
+
+    // CRC32
+    const CRC_TABLE = (function(){
+      const table = new Uint32Array(256);
+      for (let n=0;n<256;n++){
+        let c = n; for(let k=0;k<8;k++){ c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)); }
+        table[n] = c >>> 0;
+      }
+      return table;
+    })();
+    function crc32(u8){
+      let c = 0 ^ (-1);
+      for (let i=0;i<u8.length;i++) c = (c>>>8) ^ CRC_TABLE[(c ^ u8[i]) & 0xFF];
+      return (c ^ (-1)) >>> 0;
+    }
+
+    // —— 清理/渲染 ——
     function renderAll(){ renderPreview(); renderThumbs(); updateMeta(); }
     maxWidthEl.addEventListener('input', ()=> renderAll());
     spacingEl.addEventListener('input', ()=> renderAll());
