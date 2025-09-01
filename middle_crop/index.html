@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>批量裁剪图片 · 居中裁剪（cover）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --panel:#fff; --bg:#f5f7fb; --border:#e6e7ef; --text:#1f2328; --muted:#6a6f76; --accent:#1677ff;
+    --radius:16px; --shadow:0 2px 14px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:linear-gradient(180deg,#fafbff,#f2f4f7);
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei","Noto Sans",sans-serif;
+    color:var(--text);
+  }
+  .app{display:flex; gap:16px; height:100%; padding:16px}
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); display:flex; flex-direction:column; min-height:0;
+  }
+  .left{flex:1 1 48%; padding:14px}
+  .right{flex:1 1 52%; padding:14px}
+  .header{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+  .header h2{margin:0; font-size:16px; font-weight:600}
+  .hint{color:var(--muted); font-size:12px}
+
+  .dropzone{
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    border:2px dashed var(--border); border-radius:14px; padding:18px; min-height:120px;
+    background:#fbfbfe; transition:.2s ease border-color,.2s ease background;
+  }
+  .dropzone.dragover{border-color:var(--accent); background:#f0f6ff}
+  .thumbs{
+    margin-top:10px; overflow:auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding:2px;
+  }
+  .thumb{
+    border:1px solid var(--border); border-radius:12px; background:#fff; padding:8px; display:flex; gap:8px; align-items:center;
+  }
+  .thumb .ph{
+    width:68px; height:68px; border-radius:10px; background-size:cover; background-position:center; border:1px solid rgba(0,0,0,.06); flex-shrink:0;
+  }
+  .thumb .meta{min-width:0; display:flex; flex-direction:column; gap:6px; flex:1}
+  .name{font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .row label{color:var(--muted); font-size:12px}
+  .ctrl{display:flex; align-items:center; gap:6px; background:#fafafb; border:1px solid var(--border); padding:6px 10px; border-radius:10px}
+  input[type="number"]{width:84px; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:#fff; outline:none}
+  select, input[type="text"]{padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:#fff; outline:none}
+  input[type="range"]{width:160px}
+  kbd{background:#eef1f7; border:1px solid #dfe3eb; border-bottom-width:2px; padding:.1em .35em; border-radius:6px}
+
+  .previews{margin-top:10px; overflow:auto; padding:2px; display:grid; gap:10px; grid-template-columns:repeat(2,minmax(0,1fr))}
+  .card{
+    border:1px solid var(--border); border-radius:12px; padding:10px; background:#fff; display:flex; flex-direction:column; gap:10px;
+  }
+  .cropbox{
+    position:relative; width:100%; background:#f6f7fb; border:1px solid #ececf3; border-radius:10px; overflow:hidden;
+  }
+  .cropbox .fit{
+    position:absolute; inset:0; background-position:center; background-repeat:no-repeat; background-size:cover; /* cover=居中裁剪预览 */
+  }
+  .card .line{display:flex; align-items:center; justify-content:space-between; gap:10px}
+  .btn{
+    appearance:none; border:1px solid var(--border); background:#fff; padding:6px 10px; border-radius:10px; cursor:pointer; font-size:12px;
+    transition:.15s ease background,.15s ease border-color; white-space:nowrap;
+  }
+  .btn:hover{background:#f5f7fb}
+  .btn-danger{border-color:#f4d5d5; color:#b11; background:#fff7f7}
+  .btn-primary{border-color:#cfe2ff; color:#0b5ed7; background:#eef6ff}
+  .footer{margin-top:6px; text-align:center; color:var(--muted); font-size:12px}
+  @media (max-width: 980px){
+    .app{flex-direction:column}
+    .thumbs{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .previews{grid-template-columns:repeat(1,minmax(0,1fr))}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 左侧：输入 -->
+  <section class="panel left" aria-label="图片输入">
+    <div class="header">
+      <h2>图片输入</h2>
+      <span class="hint">支持拖入、选择文件或 <kbd>⌘/Ctrl + V</kbd> 粘贴</span>
+    </div>
+    <div id="dropzone" class="dropzone" tabindex="0">
+      <div>
+        <div style="font-weight:600;margin-bottom:6px">将图片拖到这里，或在此处粘贴</div>
+        <div class="hint">也可点击下方按钮选择文件</div>
+        <div style="margin-top:8px;text-align:center">
+          <button id="pickBtn" class="btn">选择图片</button>
+          <input id="fileInput" type="file" accept="image/*" multiple hidden />
+          <button id="clearBtn" class="btn btn-danger" title="清空所有图片">清空</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="thumbs" class="thumbs" aria-label="原图列表"></div>
+  </section>
+
+  <!-- 右侧：设置与结果 -->
+  <section class="panel right" aria-label="裁剪设置与结果">
+    <div class="header">
+      <h2>裁剪设置（居中裁剪 cover）</h2>
+    </div>
+
+    <div class="row" style="margin-bottom:10px">
+      <div class="ctrl">
+        <label for="tw">目标宽度</label>
+        <input id="tw" type="number" min="16" max="10000" step="1" value="1080" />
+      </div>
+      <div class="ctrl">
+        <label for="th">目标高度</label>
+        <input id="th" type="number" min="16" max="10000" step="1" value="1080" />
+      </div>
+      <div class="ctrl">
+        <label for="fmt">格式</label>
+        <select id="fmt">
+          <option value="image/png">PNG（无损）</option>
+          <option value="image/jpeg">JPEG（有损）</option>
+          <option value="image/webp">WebP（有损）</option>
+        </select>
+      </div>
+      <div class="ctrl" id="qWrap">
+        <label for="quality">质量</label>
+        <input id="quality" type="range" min="0.5" max="1" step="0.01" value="0.92" />
+        <span id="qVal" class="hint">0.92</span>
+      </div>
+      <div class="ctrl">
+        <label for="prefix">文件名前缀</label>
+        <input id="prefix" type="text" value="crop" />
+      </div>
+      <div class="ctrl">
+        <label for="padlen">编号位数</label>
+        <input id="padlen" type="number" min="1" max="4" step="1" value="3" />
+      </div>
+      <button id="exportAll" class="btn btn-primary">全部导出</button>
+    </div>
+
+    <div id="previews" class="previews" aria-label="裁剪预览"></div>
+    <div class="footer">说明：按目标宽高对每张图片进行 <b>cover</b> 居中裁剪；较小图片会按比例放大。</div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const state = { items: [] }; // {id, url, name, w?, h?}
+
+  // DOM
+  const dropzone = document.getElementById('dropzone');
+  const thumbsEl = document.getElementById('thumbs');
+  const fileInput = document.getElementById('fileInput');
+  const pickBtn = document.getElementById('pickBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const tw = document.getElementById('tw');
+  const th = document.getElementById('th');
+  const fmt = document.getElementById('fmt');
+  const qWrap = document.getElementById('qWrap');
+  const qInput = document.getElementById('quality');
+  const qVal = document.getElementById('qVal');
+  const prefix = document.getElementById('prefix');
+  const padlen = document.getElementById('padlen');
+  const previewsEl = document.getElementById('previews');
+  const exportAllBtn = document.getElementById('exportAll');
+
+  // Utils
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const pad = (n, len=3) => String(n).padStart(len,'0');
+
+  function addFiles(files){
+    const list = Array.from(files).filter(f => f.type && f.type.startsWith('image/'));
+    for (const f of list){
+      const url = URL.createObjectURL(f);
+      state.items.push({ id: Date.now() + Math.random(), url, name: f.name || 'image' });
+    }
+    renderThumbs(); renderPreviews();
+  }
+
+  async function loadImage(item){
+    if (item._img && item._img.complete) return item._img;
+    const img = new Image();
+    img.src = item.url;
+    await (img.decode ? img.decode() : new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; }));
+    item._img = img; item.w = img.naturalWidth; item.h = img.naturalHeight;
+    return img;
+  }
+
+  function renderThumbs(){
+    thumbsEl.innerHTML = '';
+    state.items.forEach((it, idx) => {
+      const row = document.createElement('div');
+      row.className = 'thumb';
+
+      const ph = document.createElement('div');
+      ph.className = 'ph';
+      ph.style.backgroundImage = `url("${it.url}")`;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = it.name;
+
+      const actions = document.createElement('div');
+      actions.className = 'row';
+
+      const upBtn = document.createElement('button');
+      upBtn.className = 'btn'; upBtn.textContent = '上移';
+      upBtn.onclick = () => { if (idx>0){ const t=state.items.splice(idx,1)[0]; state.items.splice(idx-1,0,t); renderThumbs(); renderPreviews(); }};
+
+      const downBtn = document.createElement('button');
+      downBtn.className = 'btn'; downBtn.textContent = '下移';
+      downBtn.onclick = () => { if (idx<state.items.length-1){ const t=state.items.splice(idx,1)[0]; state.items.splice(idx+1,0,t); renderThumbs(); renderPreviews(); }};
+
+      const rmBtn = document.createElement('button');
+      rmBtn.className = 'btn btn-danger'; rmBtn.textContent = '删除';
+      rmBtn.onclick = () => { removeAt(idx); };
+
+      actions.appendChild(upBtn); actions.appendChild(downBtn); actions.appendChild(rmBtn);
+      meta.appendChild(nm); meta.appendChild(actions);
+      row.appendChild(ph); row.appendChild(meta);
+      thumbsEl.appendChild(row);
+    });
+  }
+
+  function removeAt(i){
+    const [it] = state.items.splice(i,1);
+    try{ if (it?.url?.startsWith('blob:')) URL.revokeObjectURL(it.url); }catch{}
+    renderThumbs(); renderPreviews();
+  }
+
+  function clearAll(){
+    state.items.forEach(it => { try{ if (it.url?.startsWith('blob:')) URL.revokeObjectURL(it.url); }catch{} });
+    state.items = [];
+    renderThumbs(); renderPreviews();
+  }
+
+  function renderPreviews(){
+    const W = clamp(+tw.value||1080, 16, 10000);
+    const H = clamp(+th.value||1080, 16, 10000);
+    previewsEl.innerHTML = '';
+
+    const ratio = (H / W) * 100; // padding-top 百分比
+    state.items.forEach((it, idx) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const box = document.createElement('div');
+      box.className = 'cropbox';
+      box.style.aspectRatio = `${W} / ${H}`; // 现代浏览器
+      if (!('aspectRatio' in document.documentElement.style)) {
+        box.style.position = 'relative';
+        const sizer = document.createElement('div');
+        sizer.style.paddingTop = ratio + '%';
+        box.appendChild(sizer);
+      }
+      const fit = document.createElement('div');
+      fit.className = 'fit';
+      fit.style.backgroundImage = `url("${it.url}")`;
+      box.appendChild(fit);
+
+      const line = document.createElement('div');
+      line.className = 'line';
+      const label = document.createElement('div');
+      label.className = 'name';
+      label.textContent = `${prefix.value}-${pad(idx+1, +padlen.value||3)}.${extOf(fmt.value)}`;
+
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'btn btn-primary';
+      dlBtn.textContent = '下载';
+      dlBtn.onclick = () => downloadOne(idx);
+
+      line.appendChild(label); line.appendChild(dlBtn);
+      card.appendChild(box); card.appendChild(line);
+      previewsEl.appendChild(card);
+    });
+
+    // 质量控件显隐
+    qWrap.style.display = (fmt.value === 'image/png') ? 'none' : 'flex';
+  }
+
+  function extOf(mime){
+    if (mime === 'image/png') return 'png';
+    if (mime === 'image/jpeg') return 'jpg';
+    return 'webp';
+  }
+
+  async function cropToBlob(item, W, H, mime, quality){
+    const img = await loadImage(item);
+    const sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+
+    // cover：按比例放大/缩小以完全覆盖目标画布，然后以中心为基准裁剪
+    const scale = Math.max(W / sw, H / sh);
+    const dw = Math.round(sw * scale);
+    const dh = Math.round(sh * scale);
+
+    const dx = Math.round((W - dw) / 2);
+    const dy = Math.round((H - dh) / 2);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+
+    return await new Promise((resolve) => {
+      canvas.toBlob((blob)=> resolve(blob), mime, mime==='image/png'?undefined:quality);
+    });
+  }
+
+  async function downloadOne(index){
+    const W = clamp(+tw.value||1080, 16, 10000);
+    const H = clamp(+th.value||1080, 16, 10000);
+    const mime = fmt.value;
+    const quality = clamp(+qInput.value||0.92, 0.5, 1);
+    const item = state.items[index];
+    if (!item) return;
+
+    const blob = await cropToBlob(item, W, H, mime, quality);
+    if (!blob){ alert('导出失败'); return; }
+    const url = URL.createObjectURL(blob);
+    const name = `${prefix.value}-${pad(index+1, +padlen.value||3)}.${extOf(mime)}`;
+    const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  }
+
+  async function downloadAll(){
+    if (state.items.length === 0){ alert('请先添加图片'); return; }
+    exportAllBtn.disabled = true; exportAllBtn.textContent = '导出中…';
+
+    const W = clamp(+tw.value||1080, 16, 10000);
+    const H = clamp(+th.value||1080, 16, 10000);
+    const mime = fmt.value;
+    const quality = clamp(+qInput.value||0.92, 0.5, 1);
+
+    // 逐张导出，避免阻塞；浏览器可能会询问“是否允许多个文件下载”
+    for (let i=0;i<state.items.length;i++){
+      const blob = await cropToBlob(state.items[i], W, H, mime, quality);
+      if (blob){
+        const url = URL.createObjectURL(blob);
+        const name = `${prefix.value}-${pad(i+1, +padlen.value||3)}.${extOf(mime)}`;
+        const a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      }
+      // 小延迟，提升稳定性
+      await new Promise(r=>setTimeout(r, 90));
+    }
+
+    exportAllBtn.disabled = false; exportAllBtn.textContent = '全部导出';
+  }
+
+  // Events: 拖放/粘贴/选择
+  dropzone.addEventListener('dragover', (e)=>{ e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e)=>{
+    e.preventDefault(); dropzone.classList.remove('dragover');
+    if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
+  });
+  dropzone.addEventListener('paste', onPaste);
+  window.addEventListener('paste', (e)=>{
+    const a = document.activeElement;
+    const isInput = a && (a.tagName==='INPUT' || a.tagName==='TEXTAREA' || a.isContentEditable);
+    if (isInput && a!==dropzone) return;
+    onPaste(e);
+  });
+  function onPaste(e){
+    const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+    const imgs = items.filter(it=> it.type && it.type.startsWith('image/'));
+    if (!imgs.length) return;
+    e.preventDefault();
+    const files = imgs.map(it=>it.getAsFile()).filter(Boolean);
+    addFiles(files);
+  }
+  pickBtn.onclick = ()=> fileInput.click();
+  fileInput.onchange = (e)=>{ addFiles(e.target.files||[]); fileInput.value=''; };
+  clearBtn.onclick = clearAll;
+
+  // Settings changes
+  [tw, th, fmt, qInput, prefix, padlen].forEach(el=>{
+    el.addEventListener('input', ()=>{
+      if (el===qInput) qVal.textContent = (+qInput.value).toFixed(2);
+      renderPreviews();
+    });
+    el.addEventListener('change', renderPreviews);
+  });
+  exportAllBtn.onclick = downloadAll;
+
+  // Init
+  renderThumbs(); renderPreviews();
+
+  // Cleanup
+  window.addEventListener('beforeunload', ()=>{
+    state.items.forEach(it=>{ try{ if (it.url?.startsWith('blob:')) URL.revokeObjectURL(it.url); }catch{} });
+  });
+})();
+</script>
+</body>
+</html>
+
