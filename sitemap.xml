@@ -62,4 +62,14 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/color_card/"/>
   </url>
   
+  <!-- 批量裁剪工具 -->
+  <url>
+    <loc>https://cyang39.github.io/middle_crop/</loc>
+    <lastmod>2025-09-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://cyang39.github.io/middle_crop/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cyang39.github.io/middle_crop/"/>
+  </url>
+  
 </urlset>

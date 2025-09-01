@@ -7,8 +7,8 @@
     content="width=device-width, initial-scale=1, viewport-fit=cover"
   />
   <title>Cyang39 · Tools & Projects</title>
-  <meta name="description" content="Cyang39 的色彩和图像工具集。试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切和色卡排版工具，完全在浏览器中运行。" />
-  <meta name="keywords" content="Cyang39, 工具, 项目, 色彩, 调色板, 主色调, 图像色彩提取器, 纹理着色, 图片拼接, 拼图工具, 方形裁切, 图片裁切, 1:1裁切, 色卡排版, 布匹色卡, 色卡工具, GitHub Pages" />
+  <meta name="description" content="Cyang39 的色彩和图像工具集。试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切、色卡排版和批量裁剪工具，完全在浏览器中运行。" />
+  <meta name="keywords" content="Cyang39, 工具, 项目, 色彩, 调色板, 主色调, 图像色彩提取器, 纹理着色, 图片拼接, 拼图工具, 方形裁切, 图片裁切, 1:1裁切, 色卡排版, 布匹色卡, 色卡工具, 批量裁剪, 居中裁剪, cover裁剪, GitHub Pages" />
 
   <!-- Canonical -->
   <link rel="canonical" href="https://cyang39.github.io/" />
@@ -18,14 +18,14 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cyang39" />
   <meta property="og:title" content="Cyang39 · Tools & Projects" />
-  <meta property="og:description" content="试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切和色卡排版工具 — 完全在浏览器中运行的色彩分析、纹理处理、图片拼接、智能裁切和布匹色卡排版工具。" />
+  <meta property="og:description" content="试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切、色卡排版和批量裁剪工具 — 完全在浏览器中运行的色彩分析、纹理处理、图片拼接、智能裁切、布匹色卡排版和批量裁剪工具。" />
   <meta property="og:url" content="https://cyang39.github.io/" />
   <meta property="og:image" content="https://cyang39.github.io/palette/og-palette.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Cyang39 · Tools & Projects" />
-  <meta name="twitter:description" content="试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切和色卡排版工具 — 完全在浏览器中运行的色彩分析、纹理处理、图片拼接、智能裁切和布匹色卡排版工具。" />
+  <meta name="twitter:description" content="试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切、色卡排版和批量裁剪工具 — 完全在浏览器中运行的色彩分析、纹理处理、图片拼接、智能裁切、布匹色卡排版和批量裁剪工具。" />
   <meta name="twitter:image" content="https://cyang39.github.io/palette/og-palette.png" />
 
   <!-- Simple favicon (optional) -->
@@ -58,7 +58,7 @@
     "name": "Cyang39 实用工具集",
     "alternateName": "Cyang39 Tools",
     "url": "https://cyang39.github.io/",
-    "description": "Cyang39 的色彩和图像工具集。试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切和色卡排版工具，完全在浏览器中运行。",
+    "description": "Cyang39 的色彩和图像工具集。试试图像色彩提取器、纹理着色工具、图片拼接、方形裁切、色卡排版和批量裁剪工具，完全在浏览器中运行。",
     "author": {
       "@type": "Person",
       "name": "Cyang39",
@@ -112,6 +112,14 @@
         "name": "布匹色卡排版工具",
         "description": "专业的布匹色卡排版工具，支持拖拽排序、灵活布局设置，可调节色卡大小、间距和标签，一键导出高分辨率PNG色卡排版图。",
         "url": "https://cyang39.github.io/color_card/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Web Browser"
+      },
+      {
+        "@type": "WebApplication",
+        "name": "批量裁剪工具",
+        "description": "高效的批量图片裁剪工具，支持居中裁剪（cover）模式，可调节目标尺寸、输出格式和质量，一键批量导出裁剪后的图片。",
+        "url": "https://cyang39.github.io/middle_crop/",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "Web Browser"
       }
@@ -240,6 +248,7 @@
           <li><a href="/stitcher/">图片拼接</a></li>
           <li><a href="/square_cropper/">方形裁切</a></li>
           <li><a href="/color_card/">色卡排版</a></li>
+          <li><a href="/middle_crop/">批量裁剪</a></li>
           <li><a href="https://github.com/cyang39" target="_blank" rel="noopener">关于</a></li>
         </ul>
       </nav>
@@ -319,6 +328,18 @@
         </div>
         <div class="actions">
           <a class="btn primary" href="/color_card/">打开应用</a>
+          <a class="btn" href="https://github.com/cyang39" target="_blank" rel="noopener">源码</a>
+        </div>
+      </div>
+      
+      <div class="card" aria-label="批量裁剪工具">
+        <div class="thumb" style="background: linear-gradient(135deg, #4facfe, #00f2fe, #43e97b); display: grid; place-items: center; color: white; font-weight: 700; font-size: 18px;">📎 Crop</div>
+        <div class="body">
+          <h3>批量裁剪工具</h3>
+          <p>高效的批量图片裁剪工具，支持居中裁剪（cover）模式，可调节目标尺寸、输出格式和质量。</p>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="/middle_crop/">打开应用</a>
           <a class="btn" href="https://github.com/cyang39" target="_blank" rel="noopener">源码</a>
         </div>
       </div>
