@@ -1,0 +1,37 @@
+:root{
+  --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --muted:#8b949e; --brand:#3fb950; --border:#30363d;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  color:var(--text); background:var(--bg);
+}
+header,footer{max-width:960px;margin:16px auto;padding:0 16px}
+header h1{margin:.2rem 0 0}
+header p{margin:.4rem 0 0;color:var(--muted)}
+main{max-width:960px;margin:12px auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 12px;margin-bottom:16px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.muted{color:var(--muted)}
+.file input{display:none}
+.file span{display:inline-block;background:#238636;color:white;border:1px solid #2ea043;padding:8px 12px;border-radius:6px;cursor:pointer}
+.options{justify-content:space-between;align-items:flex-start}
+.group{display:flex;flex-direction:column;gap:6px}
+.group-title{font-weight:600;color:var(--muted)}
+details{width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:8px}
+.preset{border:1px solid var(--border);border-radius:8px;padding:8px;display:flex;align-items:center;gap:8px}
+.preset .meta{font-size:12px;color:var(--muted)}
+.custom{display:flex;gap:8px;margin-top:8px}
+input,button{background:#0b1220;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px}
+input:focus,button:focus{outline:2px solid #1f6feb}
+button{cursor:pointer}
+button:disabled{opacity:.6;cursor:not-allowed}
+.actions{justify-content:flex-start}
+#previewList{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.preview-item{border:1px solid var(--border);border-radius:8px;padding:8px}
+.preview-item .imgwrap{display:flex;align-items:center;justify-content:center;background:#0b1220;border:1px dashed var(--border);border-radius:6px;height:140px}
+.preview-item img{max-width:100%;max-height:100%}
+summary{cursor:pointer}
+

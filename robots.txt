@@ -5,11 +5,15 @@ Allow: /
 Allow: /index.html
 Allow: /palette/
 Allow: /colorizer/
+Allow: /stitcher/
+Allow: /square_cropper/
+Allow: /color_card/
+Allow: /middle_crop/
+Allow: /batch_resize/
 
 # 阻止抓取可能的临时文件
 Disallow: /*.tmp$
 Disallow: /*.log$
-Disallow: /.*
 
 # 站点地图
 Sitemap: https://cyang39.github.io/sitemap.xml
