@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>图片智能填充器（批量填充、改尺寸、取色）</title>
+  <style>
+    :root{
+      --line:#e0e4ec;
+      --fg:#0f172a;
+      --muted:#64748b;
+      --panel:#f1f5f9;
+      --chip:#e2e8f0;
+      --accent:#2563eb;
+      --accent-soft:#3b82f620;
+      --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--fg);background:#f8fafc;}
+    #app{display:grid;grid-template-columns:minmax(320px,2fr) minmax(320px,1.2fr);min-height:100vh}
+    @media (max-width: 1080px){#app{grid-template-columns:1fr;}}
+    #left{border-right:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+    #right{display:flex;flex-direction:column;min-width:0;background:#fff}
+    header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:5}
+    header strong{font-size:16px}
+    .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;color:#334155}
+    .meta{color:var(--muted);font-size:12px}
+
+    /* Viewer */
+    .viewerWrap{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;flex:1;min-height:320px;display:flex;align-items:center;justify-content:center}
+    .viewerWrap.pick{outline:2px dashed var(--accent)}
+    .viewerWrap.is-empty canvas#preview{display:none}
+    canvas#preview{max-width:100%;max-height:100%;display:block;background:transparent}
+    .viewerHint{position:absolute;left:12px;right:12px;bottom:12px;background:linear-gradient(180deg,rgba(15,23,42,0),rgba(15,23,42,0.55));color:#fff;padding:10px 12px;border-radius:10px;font-size:12px;display:flex;justify-content:space-between;gap:12px}
+    .colorProbe{display:flex;align-items:center;gap:8px}
+    .colorDot{width:18px;height:18px;border-radius:6px;border:1px solid #fff;box-shadow:0 0 0 1px rgba(15,23,42,.35)}
+    .emptyState{position:absolute;inset:12px;display:grid;place-items:center;color:var(--muted);text-align:center;padding:24px;gap:12px;border:1px dashed var(--line);border-radius:12px;background:#fff;pointer-events:none}
+
+    /* Controls */
+    #controls{padding:18px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:12px}
+    #controls .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:4px}
+    input[type="number"],input[type="text"],select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--fg);min-width:90px}
+    input[type="number"]{width:110px}
+    input[type="range"]{width:160px}
+    input[type="color"]{width:44px;height:32px;border:none;padding:0;background:none}
+    button{border:1px solid transparent;background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;color:var(--fg);display:inline-flex;gap:6px;align-items:center;transition:.15s}
+    button:hover{box-shadow:0 2px 8px rgba(15,23,42,.08)}
+    button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    button.secondary{border-color:var(--line);background:#fff}
+    button.danger{border-color:var(--danger);color:var(--danger)}
+    button[disabled]{opacity:.5;pointer-events:none}
+    .toggle{padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:12px;color:var(--muted);cursor:pointer}
+    .toggle.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .switch{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+
+    /* Dropzone & thumbs */
+    #dropZone{margin:16px;border:2px dashed var(--line);border-radius:14px;padding:20px;text-align:center;color:#475569;background:#f8fafc}
+    #thumbs{flex:1;overflow:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+    .thumb{border:1px solid var(--line);border-radius:12px;background:#fff;padding:8px;display:flex;flex-direction:column;gap:8px;transition:.15s;cursor:pointer;position:relative}
+    .thumb.active{outline:2px solid var(--accent);outline-offset:0}
+    .thumb img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:#f1f5f9}
+    .thumb .name{font-size:12px;color:#0f172a;line-height:1.4;word-break:break-word}
+    .thumb .badge{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--muted)}
+    .thumb .actions{display:flex;gap:6px}
+    .thumb button{flex:1;padding:6px 8px;font-size:12px}
+
+    .listHeader{display:flex;justify-content:space-between;align-items:center;padding:0 18px 10px;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+<div id="app">
+  <section id="left">
+    <div class="viewerWrap is-empty" id="viewerWrap">
+      <canvas id="preview" width="1024" height="1024"></canvas>
+      <div class="viewerHint" id="viewerHint" style="display:none">
+        <span id="vh-dim" class="meta"></span>
+        <span class="colorProbe"><span class="colorDot" id="colorDot"></span><span id="colorText"></span></span>
+      </div>
+      <div class="emptyState" id="emptyState">
+        <div style="font-size:32px">🖼️</div>
+        <div>
+          <div>左侧为实时预览区，导入图片后可查看填充效果。</div>
+          <div class="meta">支持拖拽、粘贴或多选上传，处理结果全部在本地完成。</div>
+        </div>
+      </div>
+    </div>
+    <div class="meta">提示：切换到「取色」模式后，点击预览图任意位置即可从当前合成画面吸取颜色，自动更新填充色。</div>
+  </section>
+
+  <aside id="right">
+    <header>
+      <strong>图片智能填充器</strong>
+      <span class="chip" id="countChip">0 张待处理</span>
+    </header>
+
+    <div id="controls">
+      <div class="row" id="sizeRow">
+        <label>目标宽度(px)
+          <input type="number" id="targetW" value="1024" min="32" max="8192" step="1">
+        </label>
+        <label>目标高度(px)
+          <input type="number" id="targetH" value="1024" min="32" max="8192" step="1">
+        </label>
+        <label>常用分辨率
+          <select id="preset">
+            <option value="">自定义</option>
+            <option value="512x512">512 × 512</option>
+            <option value="1024x1024" selected>1024 × 1024</option>
+            <option value="2048x2048">2048 × 2048</option>
+            <option value="1920x1080">1920 × 1080</option>
+            <option value="1536x2048">1536 × 2048</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>填充方式
+          <select id="fillMode">
+            <option value="contain" selected>等比缩放居中（默认）</option>
+            <option value="fitLong">最长边适配</option>
+            <option value="cover">拉伸铺满（等比）</option>
+            <option value="tile">平铺铺满画布</option>
+          </select>
+        </label>
+        <label id="tileScaleWrap" style="display:none">平铺缩放
+          <input type="range" id="tileScale" min="0.1" max="3" step="0.05" value="1">
+          <span class="meta" id="tileScaleVal">100%</span>
+        </label>
+        <label class="switch"><input type="checkbox" id="smooth" checked> 平滑缩放</label>
+      </div>
+
+      <div class="row" style="align-items:flex-end">
+        <label>填充背景色
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="fillColor" value="#ffffff">
+            <input type="text" id="fillColorText" value="#ffffff" placeholder="#ffffff">
+            <button class="secondary" id="eyeDrop">取色</button>
+          </div>
+        </label>
+        <label>输出格式
+          <select id="outputFormat">
+            <option value="png" selected>PNG（无损）</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
+        </label>
+        <label id="qualityWrap" style="display:none">质量
+          <input type="range" id="quality" min="0.5" max="1" step="0.01" value="0.92">
+          <span class="meta" id="qualityVal">92%</span>
+        </label>
+        <label>文件名前缀
+          <input type="text" id="prefix" placeholder="可选">
+        </label>
+      </div>
+
+      <div class="row">
+        <label style="cursor:pointer"><button id="selectBtn">选择文件</button>
+          <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+        </label>
+        <button class="primary" id="downloadSel" disabled>下载当前</button>
+        <button class="primary" id="downloadAll" disabled>批量导出 ZIP</button>
+        <button class="danger" id="clear" disabled>清空列表</button>
+      </div>
+      <div class="meta" id="status"></div>
+    </div>
+
+    <div id="dropZone">将图片拖入此处，或直接在页面按 ⌘/Ctrl + V 粘贴（支持多张）</div>
+    <div class="listHeader">
+      <span>导入列表</span>
+      <span id="listMeta">尚未导入图片</span>
+    </div>
+    <div id="thumbs"></div>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+(function(){
+  const state = {
+    items: [], // {id, name, size, url, image, width, height}
+    selected: null,
+    cfg: {
+      width: 1024,
+      height: 1024,
+      mode: 'contain',
+      tileScale: 1,
+      fill: '#ffffff',
+      format: 'png',
+      quality: 0.92,
+      smooth: true,
+      prefix: ''
+    },
+    picking: false,
+    busy: false,
+    counter: 0
+  };
+
+  // DOM refs
+  const preview = document.getElementById('preview');
+  const viewerWrap = document.getElementById('viewerWrap');
+  const emptyState = document.getElementById('emptyState');
+  const viewerHint = document.getElementById('viewerHint');
+  const vhDim = document.getElementById('vh-dim');
+  const colorDot = document.getElementById('colorDot');
+  const colorText = document.getElementById('colorText');
+  const targetW = document.getElementById('targetW');
+  const targetH = document.getElementById('targetH');
+  const preset = document.getElementById('preset');
+  const fillMode = document.getElementById('fillMode');
+  const tileScale = document.getElementById('tileScale');
+  const tileScaleWrap = document.getElementById('tileScaleWrap');
+  const tileScaleVal = document.getElementById('tileScaleVal');
+  const smooth = document.getElementById('smooth');
+  const fillColor = document.getElementById('fillColor');
+  const fillColorText = document.getElementById('fillColorText');
+  const eyeDrop = document.getElementById('eyeDrop');
+  const outputFormat = document.getElementById('outputFormat');
+  const qualityWrap = document.getElementById('qualityWrap');
+  const quality = document.getElementById('quality');
+  const qualityVal = document.getElementById('qualityVal');
+  const prefix = document.getElementById('prefix');
+  const fileInput = document.getElementById('fileInput');
+  const selectBtn = document.getElementById('selectBtn');
+  const downloadSel = document.getElementById('downloadSel');
+  const downloadAll = document.getElementById('downloadAll');
+  const clearBtn = document.getElementById('clear');
+  const countChip = document.getElementById('countChip');
+  const thumbs = document.getElementById('thumbs');
+  const dropZone = document.getElementById('dropZone');
+  const status = document.getElementById('status');
+  const listMeta = document.getElementById('listMeta');
+
+  const ctx = preview.getContext('2d');
+  const MIN_SIZE = 32;
+  const MAX_SIZE = 8192;
+
+  function updatePresetSelection(){
+    const value = `${state.cfg.width}x${state.cfg.height}`;
+    const has = Array.from(preset.options).some(opt => opt.value === value && opt.value);
+    preset.value = has ? value : '';
+  }
+
+  const supportsEyeDropper = 'EyeDropper' in window;
+
+  if(supportsEyeDropper){
+    eyeDrop.textContent = '系统取色';
+    eyeDrop.title = '调用系统取色器采样颜色';
+  } else {
+    eyeDrop.title = '切换后点击预览取色';
+  }
+
+  function clampInt(v,min,max){
+    const n = Math.round(Number(v)||0);
+    return Math.min(Math.max(n,min),max);
+  }
+  function clampFloat(v,min,max){
+    const n = Number(v)||0;
+    return Math.min(Math.max(n,min),max);
+  }
+  function toHex(v){
+    return v.toString(16).padStart(2,'0');
+  }
+  function rgbToHex(r,g,b){
+    return '#' + toHex(r) + toHex(g) + toHex(b);
+  }
+  function getFitLongScale(canvasW, canvasH, imgW, imgH){
+    if(!imgW || !imgH){ return 1; }
+    const targetLong = Math.max(canvasW, canvasH);
+    const srcLong = Math.max(imgW, imgH);
+    if(!srcLong){ return 1; }
+    let scale = targetLong / srcLong;
+    let dw = imgW * scale;
+    let dh = imgH * scale;
+    const containScale = Math.min(canvasW / imgW, canvasH / imgH);
+    if(dw > canvasW || dh > canvasH){
+      scale = containScale;
+      dw = imgW * scale;
+      dh = imgH * scale;
+    }
+    if(!Number.isFinite(scale) || scale <= 0){
+      scale = (Number.isFinite(containScale) && containScale > 0) ? containScale : 1;
+    }
+    return scale;
+  }
+  function updateFillColorInputs(val){
+    fillColor.value = val;
+    fillColorText.value = val;
+    state.cfg.fill = val;
+    colorDot.style.background = val;
+    colorText.textContent = val.toUpperCase();
+  }
+  function syncSizeInputs(){
+    targetW.value = state.cfg.width;
+    targetH.value = state.cfg.height;
+    updatePresetSelection();
+  }
+  function updateControls(){
+    downloadSel.disabled = !state.selected;
+    const hasItems = state.items.length>0;
+    downloadAll.disabled = !hasItems;
+    clearBtn.disabled = !hasItems;
+    countChip.textContent = `${state.items.length} 张待处理`;
+    listMeta.textContent = hasItems ? `${state.items.length} 张图片` : '尚未导入图片';
+  }
+  function setStatus(msg){
+    status.textContent = msg || '';
+  }
+
+  function addFiles(files){
+    const imgs = files.filter(f=>f.type.startsWith('image/'));
+    if(!imgs.length){ setStatus('未检测到图片类型文件'); return; }
+    setStatus(`正在加载 ${imgs.length} 张图片…`);
+    const promises = imgs.map(loadFile);
+    Promise.all(promises).then(newItems=>{
+      newItems.forEach(item=> state.items.push(item));
+      setStatus(`成功导入 ${newItems.length} 张图片`);
+      renderThumbs();
+      if(!state.selected && state.items.length){ selectItem(state.items[0].id); }
+      updateControls();
+    }).catch(err=>{
+      console.error(err);
+      setStatus('导入过程中出现问题，请重试');
+    });
+  }
+
+  function loadFile(file){
+    return new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const url = reader.result;
+        const img = new Image();
+        img.onload = ()=>{
+          const item = {
+            id: `img-${Date.now()}-${state.counter++}`,
+            name: file.name,
+            size: file.size,
+            url,
+            image: img,
+            width: img.naturalWidth,
+            height: img.naturalHeight
+          };
+          resolve(item);
+        };
+        img.onerror = ()=> reject(new Error('图片加载失败'));
+        img.src = url;
+      };
+      reader.onerror = ()=> reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderThumbs(){
+    thumbs.innerHTML = '';
+    state.items.forEach(item=>{
+      const div = document.createElement('div');
+      div.className = 'thumb' + (state.selected===item.id?' active':'');
+      div.dataset.id = item.id;
+      const img = document.createElement('img');
+      img.src = item.url;
+      img.loading = 'lazy';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = item.name;
+      const badge = document.createElement('div');
+      badge.className = 'badge';
+      badge.textContent = `${item.width} × ${item.height}`;
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const btnPreview = document.createElement('button');
+      btnPreview.textContent = '预览';
+      btnPreview.className = 'secondary';
+      btnPreview.addEventListener('click', e=>{ e.stopPropagation(); selectItem(item.id); });
+      const btnDownload = document.createElement('button');
+      btnDownload.textContent = '导出';
+      btnDownload.className = 'primary';
+      btnDownload.addEventListener('click', async e=>{
+        e.stopPropagation();
+        await downloadOne(item);
+      });
+      actions.append(btnPreview, btnDownload);
+      div.append(img,name,badge,actions);
+      div.addEventListener('click', ()=> selectItem(item.id));
+      thumbs.appendChild(div);
+    });
+  }
+
+  function selectItem(id){
+    if(state.selected === id) return;
+    state.selected = id;
+    renderThumbs();
+    renderPreview();
+    updateControls();
+  }
+
+  function ensureCanvasSize(){
+    if(preview.width !== state.cfg.width || preview.height !== state.cfg.height){
+      preview.width = state.cfg.width;
+      preview.height = state.cfg.height;
+    }
+  }
+
+  function renderPreview(){
+    const item = state.items.find(it=>it.id===state.selected);
+    if(!item){
+      viewerWrap.classList.add('is-empty');
+      ctx.clearRect(0,0,preview.width,preview.height);
+      viewerHint.style.display = 'none';
+      emptyState.style.display = 'grid';
+      return;
+    }
+    viewerWrap.classList.remove('is-empty');
+    ensureCanvasSize();
+    ctx.save();
+    ctx.imageSmoothingEnabled = !!state.cfg.smooth;
+    ctx.imageSmoothingQuality = state.cfg.smooth ? 'high' : 'low';
+    ctx.clearRect(0,0,preview.width,preview.height);
+    ctx.fillStyle = state.cfg.fill;
+    ctx.fillRect(0,0,preview.width,preview.height);
+
+    if(state.cfg.mode === 'contain'){
+      const s = Math.min(state.cfg.width / item.width, state.cfg.height / item.height);
+      const dw = item.width * s;
+      const dh = item.height * s;
+      const dx = (state.cfg.width - dw)/2;
+      const dy = (state.cfg.height - dh)/2;
+      ctx.drawImage(item.image, dx, dy, dw, dh);
+    } else if(state.cfg.mode === 'fitLong'){
+      const s = getFitLongScale(state.cfg.width, state.cfg.height, item.width, item.height);
+      const dw = item.width * s;
+      const dh = item.height * s;
+      const dx = (state.cfg.width - dw)/2;
+      const dy = (state.cfg.height - dh)/2;
+      ctx.drawImage(item.image, dx, dy, dw, dh);
+    } else if(state.cfg.mode === 'cover'){
+      const s = Math.max(state.cfg.width / item.width, state.cfg.height / item.height);
+      const dw = item.width * s;
+      const dh = item.height * s;
+      const dx = (state.cfg.width - dw)/2;
+      const dy = (state.cfg.height - dh)/2;
+      ctx.drawImage(item.image, dx, dy, dw, dh);
+    } else if(state.cfg.mode === 'tile'){
+      const tileCanvas = document.createElement('canvas');
+      const scale = state.cfg.tileScale;
+      tileCanvas.width = Math.max(1, Math.round(item.width * scale));
+      tileCanvas.height = Math.max(1, Math.round(item.height * scale));
+      const tctx = tileCanvas.getContext('2d');
+      tctx.imageSmoothingEnabled = !!state.cfg.smooth;
+      tctx.imageSmoothingQuality = state.cfg.smooth ? 'high' : 'low';
+      tctx.clearRect(0,0,tileCanvas.width,tileCanvas.height);
+      tctx.drawImage(item.image, 0, 0, tileCanvas.width, tileCanvas.height);
+      const pattern = ctx.createPattern(tileCanvas, 'repeat');
+      if(pattern){
+        ctx.save();
+        ctx.translate((state.cfg.width - tileCanvas.width)/2, (state.cfg.height - tileCanvas.height)/2);
+        ctx.fillStyle = pattern;
+        const spanW = Math.max(state.cfg.width, tileCanvas.width);
+        const spanH = Math.max(state.cfg.height, tileCanvas.height);
+        ctx.fillRect(-spanW, -spanH, state.cfg.width*3, state.cfg.height*3);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+
+    emptyState.style.display = 'none';
+    viewerHint.style.display = 'flex';
+    vhDim.textContent = `${item.width} × ${item.height} → ${state.cfg.width} × ${state.cfg.height}`;
+    colorDot.style.background = state.cfg.fill;
+    colorText.textContent = state.cfg.fill.toUpperCase();
+  }
+
+  function generateOutputCanvas(item){
+    const canvas = document.createElement('canvas');
+    canvas.width = state.cfg.width;
+    canvas.height = state.cfg.height;
+    const g = canvas.getContext('2d');
+    g.imageSmoothingEnabled = !!state.cfg.smooth;
+    g.imageSmoothingQuality = state.cfg.smooth ? 'high' : 'low';
+    g.fillStyle = state.cfg.fill;
+    g.fillRect(0,0,canvas.width,canvas.height);
+    if(state.cfg.mode === 'contain'){
+      const s = Math.min(canvas.width / item.width, canvas.height / item.height);
+      const dw = item.width * s;
+      const dh = item.height * s;
+      const dx = (canvas.width - dw)/2;
+      const dy = (canvas.height - dh)/2;
+      g.drawImage(item.image, dx, dy, dw, dh);
+    } else if(state.cfg.mode === 'fitLong'){
+      const s = getFitLongScale(canvas.width, canvas.height, item.width, item.height);
+      const dw = item.width * s;
+      const dh = item.height * s;
+      const dx = (canvas.width - dw)/2;
+      const dy = (canvas.height - dh)/2;
+      g.drawImage(item.image, dx, dy, dw, dh);
+    } else if(state.cfg.mode === 'cover'){
+      const s = Math.max(canvas.width / item.width, canvas.height / item.height);
+      const dw = item.width * s;
+      const dh = item.height * s;
+      const dx = (canvas.width - dw)/2;
+      const dy = (canvas.height - dh)/2;
+      g.drawImage(item.image, dx, dy, dw, dh);
+    } else if(state.cfg.mode === 'tile'){
+      const tileCanvas = document.createElement('canvas');
+      const scale = state.cfg.tileScale;
+      tileCanvas.width = Math.max(1, Math.round(item.width * scale));
+      tileCanvas.height = Math.max(1, Math.round(item.height * scale));
+      const tctx = tileCanvas.getContext('2d');
+      tctx.imageSmoothingEnabled = !!state.cfg.smooth;
+      tctx.imageSmoothingQuality = state.cfg.smooth ? 'high' : 'low';
+      tctx.fillStyle = state.cfg.fill;
+      tctx.fillRect(0,0,tileCanvas.width,tileCanvas.height);
+      tctx.drawImage(item.image, 0, 0, tileCanvas.width, tileCanvas.height);
+      const pattern = g.createPattern(tileCanvas, 'repeat');
+      if(pattern){
+        g.fillStyle = pattern;
+        g.save();
+        g.translate((canvas.width - tileCanvas.width)/2, (canvas.height - tileCanvas.height)/2);
+        const spanW = Math.max(canvas.width, tileCanvas.width);
+        const spanH = Math.max(canvas.height, tileCanvas.height);
+        g.fillRect(-spanW, -spanH, canvas.width*3, canvas.height*3);
+        g.restore();
+      }
+    }
+    return canvas;
+  }
+
+  function canvasToBlob(canvas){
+    return new Promise((resolve, reject)=>{
+      const type = state.cfg.format === 'png' ? 'image/png' : state.cfg.format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+      const quality = state.cfg.format === 'png' ? undefined : state.cfg.quality;
+      canvas.toBlob(blob=>{
+        if(blob) resolve(blob); else reject(new Error('导出失败'));
+      }, type, quality);
+    });
+  }
+
+  async function downloadOne(item){
+    if(state.busy){ return; }
+    state.busy = true;
+    setStatus(`正在导出 ${item.name} …`);
+    try{
+      const canvas = generateOutputCanvas(item);
+      const blob = await canvasToBlob(canvas);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ext = state.cfg.format === 'png' ? 'png' : state.cfg.format === 'jpeg' ? 'jpg' : 'webp';
+      const prefix = state.cfg.prefix ? state.cfg.prefix.replace(/\s+/g,'_') + '_' : '';
+      a.href = url;
+      a.download = `${prefix}${stripExt(item.name)}_${state.cfg.width}x${state.cfg.height}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus(`已导出 ${item.name}`);
+    }catch(err){
+      console.error(err);
+      setStatus('导出失败，请重试');
+    }finally{
+      state.busy = false;
+    }
+  }
+
+  function stripExt(name){
+    const idx = name.lastIndexOf('.');
+    return idx>0 ? name.slice(0, idx) : name;
+  }
+
+  async function downloadCurrent(){
+    const item = state.items.find(it=>it.id===state.selected);
+    if(item){ await downloadOne(item); }
+  }
+
+  async function downloadZip(){
+    if(state.busy || !state.items.length){ return; }
+    state.busy = true;
+    setStatus('正在批量导出并打包…');
+    try{
+      const zip = new JSZip();
+      const ext = state.cfg.format === 'png' ? 'png' : state.cfg.format === 'jpeg' ? 'jpg' : 'webp';
+      for(const item of state.items){
+        const canvas = generateOutputCanvas(item);
+        const blob = await canvasToBlob(canvas);
+        const arrayBuffer = await blob.arrayBuffer();
+        const prefix = state.cfg.prefix ? state.cfg.prefix.replace(/\s+/g,'_') + '_' : '';
+        const filename = `${prefix}${stripExt(item.name)}_${state.cfg.width}x${state.cfg.height}.${ext}`;
+        zip.file(filename, arrayBuffer);
+      }
+      const zipBlob = await zip.generateAsync({type:'blob'});
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `filled_${state.cfg.width}x${state.cfg.height}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus(`已导出 ${state.items.length} 张图片`);
+    }catch(err){
+      console.error(err);
+      setStatus('批量导出失败，请重试');
+    }finally{
+      state.busy = false;
+    }
+  }
+
+  function clearAll(){
+    state.items = [];
+    state.selected = null;
+    renderThumbs();
+    renderPreview();
+    updateControls();
+    setStatus('已清空列表');
+  }
+
+  // Eyedropper
+  eyeDrop.addEventListener('click', async ()=>{
+    if(supportsEyeDropper){
+      try {
+        const dropper = new EyeDropper();
+        const result = await dropper.open();
+        if(result && result.sRGBHex){
+          updateFillColorInputs(result.sRGBHex.toLowerCase());
+          renderPreview();
+          setStatus('已从系统取色器更新背景色');
+        }
+      } catch(err){
+        if(err && err.name !== 'AbortError'){
+          console.error(err);
+          setStatus('系统取色失败，可手动选择或在预览中取色');
+        }
+      }
+      return;
+    }
+    state.picking = !state.picking;
+    eyeDrop.classList.toggle('primary', state.picking);
+    viewerWrap.classList.toggle('pick', state.picking);
+    setStatus(state.picking ? '点击左侧预览任意位置吸取颜色' : '');
+  });
+
+  preview.addEventListener('click', (e)=>{
+    if(!state.picking) return;
+    const rect = preview.getBoundingClientRect();
+    const scaleX = preview.width / rect.width;
+    const scaleY = preview.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX);
+    const y = Math.floor((e.clientY - rect.top) * scaleY);
+    const pixel = ctx.getImageData(x,y,1,1).data;
+    const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+    updateFillColorInputs(hex);
+    renderPreview();
+    state.picking = false;
+    eyeDrop.classList.remove('primary');
+    viewerWrap.classList.remove('pick');
+    setStatus('已更新填充色');
+  });
+
+  // Input events
+  function handleDimensionInput(el, key){
+    el.addEventListener('input', ()=>{
+      const raw = el.value.trim();
+      if(!raw){ return; }
+      const val = Math.round(Number(raw));
+      if(!Number.isFinite(val) || val < MIN_SIZE){ return; }
+      const clamped = Math.min(val, MAX_SIZE);
+      if(clamped !== val){ el.value = clamped; }
+      if(state.cfg[key] !== clamped){
+        state.cfg[key] = clamped;
+        updatePresetSelection();
+        renderPreview();
+      }
+    });
+    el.addEventListener('blur', ()=>{
+      let raw = el.value.trim();
+      let val = Math.round(Number(raw));
+      if(!Number.isFinite(val)){
+        val = state.cfg[key];
+      }
+      val = Math.min(Math.max(val, MIN_SIZE), MAX_SIZE);
+      el.value = val;
+      if(state.cfg[key] !== val){
+        state.cfg[key] = val;
+        renderPreview();
+      }
+      updatePresetSelection();
+    });
+  }
+
+  handleDimensionInput(targetW, 'width');
+  handleDimensionInput(targetH, 'height');
+  preset.addEventListener('change', ()=>{
+    if(!preset.value){ return; }
+    const [w,h] = preset.value.split('x').map(Number);
+    state.cfg.width = clampInt(w, MIN_SIZE, MAX_SIZE);
+    state.cfg.height = clampInt(h, MIN_SIZE, MAX_SIZE);
+    syncSizeInputs();
+    renderPreview();
+  });
+  fillMode.addEventListener('change', ()=>{
+    state.cfg.mode = fillMode.value;
+    const isTile = state.cfg.mode === 'tile';
+    tileScaleWrap.style.display = isTile ? '' : 'none';
+    renderPreview();
+  });
+  tileScale.addEventListener('input', ()=>{
+    state.cfg.tileScale = clampFloat(tileScale.value, 0.1, 3);
+    tileScaleVal.textContent = Math.round(state.cfg.tileScale * 100) + '%';
+    renderPreview();
+  });
+  smooth.addEventListener('change', ()=>{
+    state.cfg.smooth = smooth.checked;
+    renderPreview();
+  });
+
+  fillColor.addEventListener('input', ()=>{
+    updateFillColorInputs(fillColor.value);
+    renderPreview();
+  });
+  fillColorText.addEventListener('change', ()=>{
+    const val = fillColorText.value.trim();
+    if(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val)){
+      updateFillColorInputs(val.length===4 ? expandShortHex(val) : val.toLowerCase());
+      renderPreview();
+    } else {
+      fillColorText.value = state.cfg.fill;
+    }
+  });
+  function expandShortHex(hex){
+    return '#' + hex.slice(1).split('').map(ch=>ch+ch).join('');
+  }
+
+  outputFormat.addEventListener('change', ()=>{
+    state.cfg.format = outputFormat.value;
+    const needsQuality = state.cfg.format !== 'png';
+    qualityWrap.style.display = needsQuality ? '' : 'none';
+  });
+  quality.addEventListener('input', ()=>{
+    state.cfg.quality = clampFloat(quality.value, 0.5, 1);
+    qualityVal.textContent = Math.round(state.cfg.quality * 100) + '%';
+  });
+  prefix.addEventListener('input', ()=>{
+    state.cfg.prefix = prefix.value.trim();
+  });
+
+  fileInput.addEventListener('change', e=>{
+    addFiles(Array.from(e.target.files||[]));
+    fileInput.value = '';
+  });
+  selectBtn.addEventListener('click', ()=> fileInput.click());
+  downloadSel.addEventListener('click', downloadCurrent);
+  downloadAll.addEventListener('click', downloadZip);
+  clearBtn.addEventListener('click', clearAll);
+
+  // Drag drop & paste
+  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    dropZone.addEventListener(ev, e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      if(ev==='dragenter' || ev==='dragover'){ dropZone.style.background = '#e2e8f0'; }
+      if(ev==='dragleave'){ dropZone.style.background = '#f8fafc'; }
+      if(ev==='drop'){ dropZone.style.background = '#f8fafc'; }
+    });
+  });
+  dropZone.addEventListener('drop', e=>{
+    const files = Array.from(e.dataTransfer?.files||[]);
+    addFiles(files);
+  });
+
+  window.addEventListener('paste', e=>{
+    const files = [];
+    for(const item of e.clipboardData?.items||[]){
+      if(item.kind==='file'){
+        const file = item.getAsFile();
+        if(file && file.type.startsWith('image/')) files.push(file);
+      }
+    }
+    if(files.length){
+      e.preventDefault();
+      addFiles(files);
+    }
+  });
+
+  // Initial
+  syncSizeInputs();
+  updateFillColorInputs(state.cfg.fill);
+  renderPreview();
+  updateControls();
+})();
+</script>
+</body>
+</html>
